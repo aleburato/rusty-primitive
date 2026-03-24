@@ -44,7 +44,7 @@ impl Default for RenderOptions {
         Self {
             count: 100,
             shape: ShapeKind::Any,
-            alpha: AlphaOption::Fixed(128),
+            alpha: AlphaOption::Auto,
             repeat: 0,
             seed: None,
             background: BackgroundOption::Auto,
@@ -154,7 +154,7 @@ impl std::fmt::Display for ApproximateError {
 impl std::error::Error for ApproximateError {}
 
 pub fn parse_alpha_str(value: &str) -> Result<AlphaOption, String> {
-    if value.eq_ignore_ascii_case("auto") {
+    if value.eq_ignore_ascii_case("auto") || value == "0" {
         return Ok(AlphaOption::Auto);
     }
 
@@ -162,7 +162,7 @@ pub fn parse_alpha_str(value: &str) -> Result<AlphaOption, String> {
         .parse()
         .map_err(|err| format!("invalid alpha: {err}"))?;
     if !(1..=255).contains(&parsed) {
-        return Err("alpha must be 1..255 or auto".to_string());
+        return Err("alpha must be 0..255 where 0 means auto".to_string());
     }
     Ok(AlphaOption::Fixed(parsed as u8))
 }
@@ -170,8 +170,9 @@ pub fn parse_alpha_str(value: &str) -> Result<AlphaOption, String> {
 pub fn parse_alpha_u32(value: Option<u32>) -> Result<AlphaOption, String> {
     match value {
         None => Ok(AlphaOption::Auto),
+        Some(0) => Ok(AlphaOption::Auto),
         Some(value) if (1..=255).contains(&value) => Ok(AlphaOption::Fixed(value as u8)),
-        Some(_) => Err("alpha must be 1..255 or auto".to_string()),
+        Some(_) => Err("alpha must be 0..255 where 0 means auto".to_string()),
     }
 }
 
@@ -352,7 +353,9 @@ fn validate_options(render: &RenderOptions) -> Result<(), ApproximateError> {
     }
     if let AlphaOption::Fixed(alpha) = render.alpha {
         if alpha == 0 {
-            return Err(ApproximateError::validation("alpha must be 1..255 or auto"));
+            return Err(ApproximateError::validation(
+                "alpha must be 0..255 where 0 means auto",
+            ));
         }
     }
     Ok(())
@@ -447,17 +450,23 @@ mod tests {
     #[test]
     fn parse_alpha_helpers_cover_string_and_numeric_inputs() {
         assert_eq!(parse_alpha_str("auto"), Ok(AlphaOption::Auto));
+        assert_eq!(parse_alpha_str("0"), Ok(AlphaOption::Auto));
         assert_eq!(parse_alpha_str("128"), Ok(AlphaOption::Fixed(128)));
         assert_eq!(parse_alpha_u32(None), Ok(AlphaOption::Auto));
+        assert_eq!(parse_alpha_u32(Some(0)), Ok(AlphaOption::Auto));
         assert_eq!(parse_alpha_u32(Some(128)), Ok(AlphaOption::Fixed(128)));
 
         assert_eq!(
-            parse_alpha_str("0").expect_err("zero alpha should fail"),
-            "alpha must be 1..255 or auto"
+            parse_alpha_str("256").expect_err("alpha >255 should fail"),
+            "alpha must be 0..255 where 0 means auto"
         );
         assert_eq!(
-            parse_alpha_u32(Some(0)).expect_err("zero alpha should fail"),
-            "alpha must be 1..255 or auto"
+            parse_alpha_u32(Some(256)).expect_err("alpha >255 should fail"),
+            "alpha must be 0..255 where 0 means auto"
+        );
+        assert_eq!(
+            parse_alpha_str("-1").expect_err("negative alpha should fail"),
+            "alpha must be 0..255 where 0 means auto"
         );
     }
 

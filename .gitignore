@@ -13,6 +13,10 @@ __pycache__/
 node_modules/
 *.node
 
+# napi-rs generated binding loader and types
+/binding.js
+/binding.d.ts
+
 # profiling artifacts – use /tmp/primeval-profile-artifacts/ instead
 /collapsed.txt
 /trace_table.xml

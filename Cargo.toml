@@ -2,7 +2,6 @@
 resolver = "2"
 members = [
     "crates/primeval-core",
-    "crates/primeval-cli",
     "crates/primeval-render",
     "binding",
 ]

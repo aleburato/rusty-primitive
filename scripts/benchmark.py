@@ -19,16 +19,8 @@ from typing import Optional
 from datetime import datetime
 from PIL import Image
 
-DEFAULT_BIN_A = Path("./target/release/primeval-cli")
-DEFAULT_BUILD_CMD = [
-    "cargo",
-    "build",
-    "--release",
-    "--manifest-path",
-    "Cargo.toml",
-    "--bin",
-    "primeval-cli",
-]
+DEFAULT_BIN_A = Path("./dist/cli.js")
+DEFAULT_BUILD_CMD = ["npm", "run", "test:native:build"]
 OUTPUT_DIR = Path("output")
 
 
@@ -45,6 +37,7 @@ class BenchmarkResult:
     shape_type: int
     shape_name: str
     steps: int
+    alpha: int
     seed: int
     elapsed_time: float
     file_size: int
@@ -466,6 +459,12 @@ def parse_args():
         help="Input image path",
     )
     p.add_argument("--steps", type=int, default=250, help="Number of primitives per run")
+    p.add_argument(
+        "--alpha",
+        type=int,
+        default=128,
+        help="Alpha value passed to the Rust CLI benchmark command (0..255, default: 128)",
+    )
     p.add_argument("--seed", type=int, default=42, help="Random seed")
     p.add_argument(
         "--shapes",
@@ -562,17 +561,20 @@ def command_output(cmd):
     return f"{result.stdout}\n{result.stderr}"
 
 
+def binary_command(binary, *args):
+    """Build a runnable command for either executables or Node .js entrypoints."""
+    binary_path = Path(binary)
+    if binary_path.suffix == ".js":
+        return ["node", str(binary_path), *args]
+    return [str(binary_path), *args]
+
+
 @lru_cache(maxsize=None)
 def detect_cli_style(binary):
-    """Detect whether a binary uses the upstream Go flags or the Rust subcommand CLI."""
-    run_help = command_output([binary, "run", "--help"])
-    if "--count" in run_help and "--shape" in run_help and "--output" in run_help:
-        return "rust"
-
-    root_help = command_output([binary, "--help"])
-    if "Commands:" in root_help and "run" in root_help:
-        return "rust"
-
+    """Detect whether a binary uses primeval long flags or upstream Go flags."""
+    root_help = command_output(binary_command(binary, "--help"))
+    if "--count" in root_help and "--shape" in root_help and "--output" in root_help:
+        return "primeval"
     return "go"
 
 
@@ -583,36 +585,42 @@ def supports_seed_flag(binary):
     # We inspect that output rather than passing -seed directly (which would
     # show up as an error message and give a false positive).
     try:
-        result = subprocess.run([binary, "-help"], capture_output=True, text=True, check=False)
+        result = subprocess.run(
+            binary_command(binary, "-help"),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
     except OSError:
         return False
     return "-seed" in result.stderr or "-seed" in result.stdout
 
 
-def build_command(binary, cli_style, shape_type, shape_name, input_image, output_file, steps, seed):
-    """Build the correct invocation for either the Go or Rust CLI."""
-    if cli_style == "rust":
+def build_command(binary, cli_style, shape_type, shape_name, input_image, output_file, steps, seed, alpha):
+    """Build the correct invocation for either the primeval or Go CLI."""
+    if cli_style == "primeval":
         emit = output_file.suffix.lstrip(".").lower() or "png"
-        return [
+        return binary_command(
             binary,
-            "run",
             str(input_image),
             "--output",
             str(output_file),
-            "--emit",
+            "--format",
             emit,
             "--count",
             str(steps),
             "--shape",
             RUST_SHAPES[shape_name],
+            "--alpha",
+            str(alpha),
             "--seed",
             str(seed),
             "--progress",
             "off",
-        ]
+        )
 
     cmd = [
-        binary,
+        *binary_command(binary),
         "-i", str(input_image),
         "-o", str(output_file),
         "-n", str(steps),
@@ -623,9 +631,9 @@ def build_command(binary, cli_style, shape_type, shape_name, input_image, output
     return cmd
 
 
-def measure_svg_size(binary, cli_style, shape_type, shape_name, input_image, steps, seed, output_file):
+def measure_svg_size(binary, cli_style, shape_type, shape_name, input_image, steps, seed, alpha, output_file):
     """Generate an SVG sidecar outside the timed benchmark path and return its rounded size in KB."""
-    cmd = build_command(binary, cli_style, shape_type, shape_name, input_image, output_file, steps, seed)
+    cmd = build_command(binary, cli_style, shape_type, shape_name, input_image, output_file, steps, seed, alpha)
     result = subprocess.run(
         cmd,
         stdout=subprocess.DEVNULL,
@@ -672,7 +680,7 @@ def compute_image_metrics(input_image, output_file, reference_cache):
     }
 
 
-def run_benchmark(binary, cli_style, shape_type, shape_name, input_image, steps, seed, label, reference_cache):
+def run_benchmark(binary, cli_style, shape_type, shape_name, input_image, steps, seed, alpha, label, reference_cache):
     """Run a single benchmark with the specified shape type and binary."""
     bin_dir = OUTPUT_DIR / label / shape_name
     bin_dir.mkdir(parents=True, exist_ok=True)
@@ -680,7 +688,7 @@ def run_benchmark(binary, cli_style, shape_type, shape_name, input_image, steps,
     output_file = bin_dir / f"{shape_name}_{steps}.png"
     svg_output_file = bin_dir / f"{shape_name}_{steps}.svg"
 
-    cmd = build_command(binary, cli_style, shape_type, shape_name, input_image, output_file, steps, seed)
+    cmd = build_command(binary, cli_style, shape_type, shape_name, input_image, output_file, steps, seed, alpha)
 
     print(f"  [{label}] {shape_name} — starting", flush=True)
 
@@ -713,6 +721,7 @@ def run_benchmark(binary, cli_style, shape_type, shape_name, input_image, steps,
         input_image,
         steps,
         seed,
+        alpha,
         svg_output_file,
     )
     metrics = compute_image_metrics(input_image, output_file, reference_cache)
@@ -727,6 +736,7 @@ def run_benchmark(binary, cli_style, shape_type, shape_name, input_image, steps,
         shape_type=shape_type,
         shape_name=shape_name,
         steps=steps,
+        alpha=alpha,
         seed=seed,
         elapsed_time=elapsed_time,
         file_size=file_size,
@@ -739,12 +749,23 @@ def run_benchmark(binary, cli_style, shape_type, shape_name, input_image, steps,
     ).to_dict()
 
 
-def run_all(binary, label, input_image, steps, seed, selected_shapes):
+def run_all(binary, label, input_image, steps, seed, alpha, selected_shapes):
     cli_style = detect_cli_style(binary)
     results = []
     reference_cache = {}
     for shape_type, shape_name in selected_shapes:
-        r = run_benchmark(binary, cli_style, shape_type, shape_name, input_image, steps, seed, label, reference_cache)
+        r = run_benchmark(
+            binary,
+            cli_style,
+            shape_type,
+            shape_name,
+            input_image,
+            steps,
+            seed,
+            alpha,
+            label,
+            reference_cache,
+        )
         if r:
             results.append(r)
     return results
@@ -928,7 +949,7 @@ def generate_comparison_html(results_a, results_b, label_a, label_b, args):
         <div class="header-meta">
             <span>{input_name}</span><br>
             <span>{format_artifact_size(input_size_kb)}</span><br>
-            <span>{args.steps} steps &nbsp;·&nbsp; seed {args.seed}</span>
+            <span>{args.steps} steps &nbsp;·&nbsp; seed {args.seed} &nbsp;·&nbsp; alpha {args.alpha}</span>
         </div>
     </div>
 </div>
@@ -1074,7 +1095,7 @@ def generate_single_html(results, args):
         '        <div class="header-meta">\n',
         f'            <span>{input_name}</span><br>\n',
         f'            <span>{format_artifact_size(input_size_kb)}</span><br>\n',
-        f'            <span>{args.steps} steps · seed {args.seed}</span>\n',
+        f'            <span>{args.steps} steps · seed {args.seed} · alpha {args.alpha}</span>\n',
         '        </div>\n    </div>\n</div>\n',
         '<div class="stats">\n',
         f'    <div class="stat"><p class="stat-label">Total Time</p><p class="stat-value">{format_duration(total_time)}</p></div>\n',
@@ -1096,7 +1117,7 @@ def generate_single_html(results, args):
         '    <div class="section-head">\n        <span class="section-title">Visual Output</span>\n        <div class="section-rule"></div>\n    </div>\n',
         f'    <div class="gallery-grid">{cards_html}</div>\n',
         '</div>\n',
-        f'<div class="footer">\n    <span>Generated {now}</span>\n    <span>{args.bin_a} · {args.steps} steps</span>\n</div>\n',
+        f'<div class="footer">\n    <span>Generated {now}</span>\n    <span>{args.bin_a} · {args.steps} steps · alpha {args.alpha}</span>\n</div>\n',
         '</body>\n</html>',
     ]
     return "".join(parts)
@@ -1107,6 +1128,7 @@ def serialize_report(results, args, label_a, label_b=None):
         "generated_at": datetime.now().isoformat(),
         "input_image": str(args.input),
         "steps": args.steps,
+        "alpha": args.alpha,
         "seed": args.seed,
         "label_a": label_a,
         "label_b": label_b,
@@ -1129,6 +1151,7 @@ def load_report(path):
             "generated_at": first.get("timestamp"),
             "input_image": None,
             "steps": first.get("steps"),
+            "alpha": first.get("alpha", 128),
             "seed": first.get("seed"),
             "label_a": None,
             "label_b": None,
@@ -1156,6 +1179,7 @@ def main_from_json(args):
 
     # Infer display metadata from the first record.
     steps = payload.get("steps", args.steps)
+    alpha = payload.get("alpha", args.alpha)
     seed = payload.get("seed", args.seed)
     input_image = payload.get("input_image") or args.input
 
@@ -1169,6 +1193,7 @@ def main_from_json(args):
         synth = argparse.Namespace(
             input=input_image,
             steps=steps,
+            alpha=alpha,
             seed=seed,
             bin_a=payload.get("bin_a") or label_a,
             bin_b=payload.get("bin_b") or label_b,
@@ -1180,6 +1205,7 @@ def main_from_json(args):
         synth = argparse.Namespace(
             input=input_image,
             steps=steps,
+            alpha=alpha,
             seed=seed,
             bin_a=payload.get("bin_a") or labels[0],
             label_a=labels[0],
@@ -1199,6 +1225,8 @@ def main_from_json(args):
 
 def main():
     args = parse_args()
+    if not 0 <= args.alpha <= 255:
+        raise SystemExit("--alpha must be in 0..255")
 
     if args.from_json:
         main_from_json(args)
@@ -1236,12 +1264,34 @@ def main():
     reference_cache = {}
 
     for shape_type, shape_name in selected_shapes:
-        ra = run_benchmark(args.bin_a, cli_style_a, shape_type, shape_name, input_image, args.steps, args.seed, label_a, reference_cache)
+        ra = run_benchmark(
+            args.bin_a,
+            cli_style_a,
+            shape_type,
+            shape_name,
+            input_image,
+            args.steps,
+            args.seed,
+            args.alpha,
+            label_a,
+            reference_cache,
+        )
         if ra:
             results_a.append(ra)
 
         if args.bin_b:
-            rb = run_benchmark(args.bin_b, cli_style_b, shape_type, shape_name, input_image, args.steps, args.seed, label_b, reference_cache)
+            rb = run_benchmark(
+                args.bin_b,
+                cli_style_b,
+                shape_type,
+                shape_name,
+                input_image,
+                args.steps,
+                args.seed,
+                args.alpha,
+                label_b,
+                reference_cache,
+            )
             if rb:
                 results_b.append(rb)
 

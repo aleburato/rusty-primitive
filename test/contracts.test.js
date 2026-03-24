@@ -33,7 +33,6 @@ function parseRustRenderDefaults(source) {
   const patterns = {
     count: /count:\s*(\d+),/,
     shape: /shape:\s*ShapeKind::([A-Za-z]+),/,
-    alpha: /alpha:\s*AlphaOption::Fixed\((\d+)\),/,
     repeat: /repeat:\s*(\d+),/,
     background: /background:\s*BackgroundOption::([A-Za-z]+),/,
     resizeInput: /resize_input:\s*(\d+),/,
@@ -51,7 +50,11 @@ function parseRustRenderDefaults(source) {
   return {
     count: Number(values.count),
     shape: values.shape.toLowerCase(),
-    alpha: Number(values.alpha),
+    alpha: (() => {
+      const alphaMatch = block[1].match(/alpha:\s*AlphaOption::([A-Za-z]+)(?:\((\d+)\))?,/);
+      assert.ok(alphaMatch, "missing Rust default for alpha");
+      return alphaMatch[1] === "Auto" ? 0 : Number(alphaMatch[2]);
+    })(),
     repeat: Number(values.repeat),
     background: values.background.toLowerCase(),
     resizeInput: Number(values.resizeInput),
@@ -112,15 +115,15 @@ test("alpha validation message is aligned across surfaces", () => {
     ),
   ];
 
-  assert.deepEqual(messages, new Array(messages.length).fill("alpha must be 1..255 or auto"));
+  assert.deepEqual(
+    messages,
+    new Array(messages.length).fill("alpha must be 0..255 where 0 means auto"),
+  );
 });
 
-test("cli and binding use shared Rust option parsers", () => {
-  const cliSource = readRepoFile("crates", "primeval-cli", "src", "main.rs");
+test("binding uses shared Rust option parsers", () => {
   const bindingSource = readRepoFile("binding", "src", "binding.rs");
 
-  assert.match(cliSource, /parse_alpha_str/);
-  assert.match(cliSource, /parse_background_str/);
   assert.match(bindingSource, /parse_alpha_str/);
   assert.match(bindingSource, /parse_background_str/);
   assert.match(bindingSource, /parse_seed_i64/);

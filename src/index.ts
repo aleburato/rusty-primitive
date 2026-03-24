@@ -1,6 +1,8 @@
-import { createRequire } from "node:module";
-
-const require = createRequire(import.meta.url);
+import {
+  startApproximate as nativeStart,
+  cancelApproximate as nativeCancel,
+} from "../binding.js";
+import type { NativeApproximateResult, NativeProgressInfo } from "../binding.js";
 
 // --- Public types ---
 
@@ -24,7 +26,7 @@ export type Shape =
 export type RenderOptions = {
   count?: number;
   shape?: Shape;
-  alpha?: number | "auto";
+  alpha?: number;
   repeat?: number;
   seed?: number;
   background?: "auto" | string;
@@ -114,28 +116,15 @@ const VALID_SHAPES: readonly Shape[] = [
 
 const VALID_OUTPUTS: readonly OutputFormat[] = ["svg", "png", "jpg", "gif"];
 
-interface NativeResult {
-  format: string;
-  data: Buffer;
-  mimeType: string;
-  width: number;
-  height: number;
-}
-
 interface NativeHandle {
-  promise: Promise<NativeResult>;
+  promise: Promise<NativeApproximateResult>;
   taskId: number;
-}
-
-interface NativeAddon {
-  startApproximate(request: unknown): NativeHandle;
-  cancelApproximate(taskId: number): void;
 }
 
 interface NormalizedRender {
   count?: number;
   shape?: Shape;
-  alpha?: number | "auto";
+  alpha?: number;
   repeat?: number;
   seed?: number;
   background?: string;
@@ -191,7 +180,7 @@ function normalizeRender(render?: Record<string, unknown>): NormalizedRender {
   const r = render ?? {};
   const count = r.count == null ? undefined : (r.count as number);
   const shape = r.shape == null ? undefined : (r.shape as Shape);
-  const alpha = r.alpha == null ? undefined : (r.alpha as number | "auto");
+  const alpha = r.alpha == null ? undefined : (r.alpha as number);
   const repeat = r.repeat == null ? undefined : (r.repeat as number);
   const background = r.background == null ? undefined : (r.background as string);
   const resizeInput = r.resizeInput == null ? undefined : (r.resizeInput as number);
@@ -204,12 +193,8 @@ function normalizeRender(render?: Record<string, unknown>): NormalizedRender {
   if (shape !== undefined && !(VALID_SHAPES as readonly string[]).includes(shape)) {
     throw new ValidationError(`unknown shape: ${shape}`);
   }
-  if (
-    alpha !== undefined &&
-    alpha !== "auto" &&
-    (!Number.isInteger(alpha) || alpha < 1 || alpha > 255)
-  ) {
-    throw new ValidationError("alpha must be 1..255 or auto");
+  if (alpha !== undefined && (!Number.isInteger(alpha) || alpha < 0 || alpha > 255)) {
+    throw new ValidationError("alpha must be 0..255 where 0 means auto");
   }
   if (repeat !== undefined && (!Number.isInteger(repeat) || repeat < 0)) {
     throw new ValidationError("repeat must be at least 0");
@@ -252,43 +237,6 @@ function normalizeRequest(request: unknown): NormalizedRequest {
   };
 }
 
-// --- Native addon loading ---
-
-function getPlatformPackageName(): string {
-  switch (process.platform) {
-    case "darwin":
-      return `@aleburato/primeval-darwin-${process.arch}`;
-    case "win32":
-      return `@aleburato/primeval-win32-${process.arch}-msvc`;
-    case "linux":
-      if (process.arch !== "x64" && process.arch !== "arm64") {
-        throw new ValidationError(`unsupported linux architecture: ${process.arch}`);
-      }
-      return `@aleburato/primeval-linux-${process.arch}-gnu`;
-    default:
-      throw new ValidationError(`unsupported platform: ${process.platform}`);
-  }
-}
-
-let _native: NativeAddon | null = null;
-
-function loadNative(): NativeAddon {
-  if (_native) return _native;
-  const packageName = getPlatformPackageName();
-  try {
-    _native = require(packageName) as NativeAddon;
-  } catch (error) {
-    try {
-      _native = require("../primeval-node.node") as NativeAddon;
-    } catch (fallbackError) {
-      throw new Error(
-        `could not load native addon ${packageName}: ${error instanceof Error ? error.message : String(error)}; local fallback also failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
-      );
-    }
-  }
-  return _native;
-}
-
 // --- Error mapping ---
 
 function mapNativeError(error: unknown): Error {
@@ -317,15 +265,14 @@ function startApproximate(
   request: ApproximateRequest,
 ): { promise: Promise<ApproximateResult>; cancel: () => void } {
   const normalized = normalizeRequest(request);
-  const native = loadNative();
   const onProgress =
     normalized.execution.onProgress &&
-    ((_: unknown, info: ProgressInfo | null): void => {
+    ((_: unknown, info: NativeProgressInfo | null): void => {
       if (info) {
         normalized.execution.onProgress?.(info);
       }
     });
-  const handle = native.startApproximate({
+  const handle = nativeStart({
     input: normalized.input,
     output: normalized.output,
     render: {
@@ -347,9 +294,9 @@ function startApproximate(
         : { outputSize: normalized.render.outputSize }),
     },
     execution: onProgress ? { onProgress } : undefined,
-  });
+  }) as NativeHandle;
 
-  const cancel = (): void => native.cancelApproximate(handle.taskId);
+  const cancel = (): void => nativeCancel(handle.taskId);
   const signal = normalized.execution.signal;
   let onAbort: (() => void) | undefined;
   if (signal) {

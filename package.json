@@ -20,26 +20,30 @@
     },
     "./package.json": "./package.json"
   },
+  "bin": {
+    "primeval": "dist/cli.js"
+  },
   "engines": {
     "node": ">=20"
   },
   "files": [
     "dist",
+    "binding.js",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
-    "build:node": "napi build -p primeval-node --release --output-dir . --dts target/primeval-node.d.ts",
+    "build": "tsc && chmod +x dist/cli.js",
+    "build:node": "napi build -p primeval-node --release --platform --js-package-name @aleburato/primeval --js binding.js --dts binding.d.ts --esm --output-dir .",
     "check:napi-targets": "node scripts/napi-targets.mjs check-package",
     "bump:version": "node scripts/napi-targets.mjs bump-version",
     "test:native:build": "npm run build && npm run build:node",
     "test:native": "node --test test/native.test.js",
     "typecheck": "tsc --noEmit",
     "pretest": "npm run build && npm run build:node",
-    "test": "node --test test/index.test.js test/contracts.test.js test/native.test.js",
+    "test": "node --test test/index.test.js test/contracts.test.js test/native.test.js test/cli.test.js",
     "test:tooling": "node --test test/tooling/*.test.js",
-    "prepack": "tsc"
+    "prepack": "npm run build"
   },
   "optionalDependencies": {
     "@aleburato/primeval-darwin-arm64": "0.1.1",

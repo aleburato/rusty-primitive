@@ -67,7 +67,7 @@ jobs:
           key: ${{ matrix.target }}
 
       - name: Build native addon
-        run: npx napi build -p primeval-node --release --target ${{ matrix.target }} --platform --output-dir .
+        run: npx napi build -p primeval-node --release --target ${{ matrix.target }} --platform --no-js --output-dir .
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7

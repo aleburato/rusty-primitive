@@ -76,11 +76,11 @@ test("native approximate accepts omitted seed", async () => {
   assert.match(result.data, /^<svg\b/);
 });
 
-test("native approximate accepts auto alpha", async () => {
+test("native approximate treats alpha 0 as auto", async () => {
   const result = await approximate({
     input: { kind: "bytes", data: FIXTURE_IMAGE },
     output: "svg",
-    render: render({ alpha: "auto" }),
+    render: render({ alpha: 0 }),
   });
 
   assert.equal(result.format, "svg");

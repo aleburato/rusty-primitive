@@ -44,7 +44,7 @@ struct RunArgs {
     #[arg(long, default_value = "any", value_parser = shape_kind_parser())]
     shape: ShapeKind,
 
-    #[arg(long, default_value = "128")]
+    #[arg(long, default_value = "0")]
     alpha: String,
 
     #[arg(long, default_value = "auto")]

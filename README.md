@@ -21,7 +21,7 @@ Give it an input image and it searches for a layered approximation you can expor
   </tr>
 </table>
 
-Inspired by Michael Fogleman's original [`primitive`](https://github.com/fogleman/primitive), this repository is an **independent Rust implementation** with a reusable core library (`primeval-core`), a CLI (`primeval-cli`), and an ESM-only Node package (`@aleburato/primeval`).
+Inspired by Michael Fogleman's original [`primitive`](https://github.com/fogleman/primitive), this repository is an **independent Rust implementation** with a reusable core library (`primeval-core`) and an ESM-only Node package (`@aleburato/primeval`) that includes both a programmatic API and a Node CLI.
 
 ## Progression Gallery
 
@@ -44,50 +44,48 @@ npm install @aleburato/primeval
 
 Prebuilt native addons are provided for macOS (arm64, x64), Linux (arm64, x64), and Windows (x64). Node 20+ is required.
 
-### CLI from source
-
-Clone the repository and build the release binary:
-
-```bash
-git clone git@github.com:aleburato/primeval.git
-cd primeval
-cargo build --release
-```
-
-Or install the CLI directly:
-
-```bash
-cargo install --path crates/primeval-cli
-```
+The package also exposes a CLI binary named `primeval`.
 
 ## Quick Start
 
-Run the CLI against one of the bundled README originals:
+Run the package CLI (no Rust build required):
 
 ```bash
-./target/release/primeval-cli run \
-  docs/readme/originals/monalisa.jpg \
-  --output output/monalisa.png \
-  --emit png,svg \
-  --count 1000
+npx @aleburato/primeval docs/readme/originals/monalisa.jpg \
+  --output output/monalisa.svg \
+  --count 300 \
+  --shape any
+```
+
+Or install globally to call `primeval` directly:
+
+```bash
+npm install -g @aleburato/primeval
+primeval docs/readme/originals/monalisa.jpg --output output/monalisa.png --count 300
 ```
 
 Useful options:
 
 - `--shape any|triangle|rectangle|ellipse|circle|rotated-rectangle|quadratic|rotated-ellipse|polygon` with `any` as the default
 - `--count <N>` number of optimization steps (default `100`)
-- `--alpha <N>|auto` shape opacity, `1`..`255` or `auto` (default `128`)
+- `--alpha <N>` shape opacity, `0`..`255` where `0` is `auto` (default `0`)
 - `--resize-input <N>` working resolution (default `256`)
 - `--output-size <N>` final replay resolution (default `1024`)
 - `--repeat <N>` extra candidates per step (default `0`)
-- `--threads <N>` worker thread count (defaults to available cores)
 - `--seed <N>` for deterministic output
-- `--emit png,jpg,svg,gif` one or more output formats
+- `--format svg|png|jpg|gif` optional output format override
+- `--progress auto|plain|off` progress reporting mode (default `auto`)
+
+Write SVG output to stdout:
+
+```bash
+primeval docs/readme/originals/monalisa.jpg --output - --count 200 > output/monalisa.svg
+```
 
 See the full CLI help with:
 
 ```bash
-./target/release/primeval-cli run --help
+primeval --help
 ```
 
 ## Node Package
@@ -124,7 +122,7 @@ Render options:
 
 - `count?: number` optimization steps. Default: `100`.
 - `shape?: "any" | "triangle" | "rectangle" | "ellipse" | "circle" | "rotated-rectangle" | "quadratic" | "rotated-ellipse" | "polygon"`. Default: `"any"`.
-- `alpha?: number | "auto"` shape opacity. Accepted values: `1..255` or `"auto"`. Default: `128`.
+- `alpha?: number` shape opacity. Accepted values: `0..255` where `0` means auto. Default: `0`.
 - `repeat?: number` extra candidates per step. Default: `0`.
 - `seed?: number` deterministic RNG seed. Omit it to let Rust choose a non-deterministic seed.
 - `background?: "auto" | string` background color. Use `"auto"` or a hex color in `RGB`, `RGBA`, `RRGGBB`, or `RRGGBBAA` form, with optional leading `#`. Default: `"auto"`.
@@ -190,39 +188,47 @@ try {
 Package notes:
 
 - Missing `render` fields are forwarded to Rust and resolved there; the package does not reinvent render defaults in TypeScript.
-- Default render options from Rust are `count: 100`, `shape: "any"`, `alpha: 128`, `repeat: 0`, `seed: None`, `background: "auto"`, `resizeInput: 256`, and `outputSize: 1024`.
+- Current Rust defaults are `count: 100`, `shape: "any"`, `alpha: 0` (`auto`), `repeat: 0`, omitted `seed`, `background: "auto"`, `resizeInput: 256`, and `outputSize: 1024`.
 - `approximate()` returns exactly one output format per call: `svg`, `png`, `jpg`, or `gif`.
 - The default shape is `any` (mixed); all nine CLI shape modes are available.
 - Errors are mapped to `ValidationError`, `NotFoundError`, and `AbortError` — use `instanceof` to distinguish them.
 - For SVG results, `data` is a `string`; for raster results, `data` is a `Buffer`.
 
+## Alpha Comparison (Mona Lisa, 200 steps, mixed shape)
+
+The images below use identical settings (`shape: any`, `count: 200`, `seed: 42`) with only alpha changed:
+
+- `alpha: 0` (`auto`)
+- `alpha: 128` (fixed, historical default)
+
+| Alpha 0 (auto) | Alpha 128 (fixed) | Difference (boosted) |
+| --- | --- | --- |
+| ![Mona Lisa rendered with alpha auto at 200 steps.](docs/readme/comparisons/monalisa-any-200-alpha-auto.png) | ![Mona Lisa rendered with fixed alpha 128 at 200 steps.](docs/readme/comparisons/monalisa-any-200-alpha-128.png) | ![Boosted per-pixel difference between alpha auto and alpha 128 renders.](docs/readme/comparisons/monalisa-any-200-alpha-diff-boosted.png) |
+
 ## CLI Reference
 
-`primeval-cli run` accepts:
+`primeval` accepts:
 
 - `input` (required positional): input image path
 - `--output <PATH>` (required): output path, or `-` for stdout
-- `--emit png,jpg,svg,gif` optional comma-separated output formats. If omitted, the CLI infers one format from `--output`; `--output -` defaults to `svg`.
+- `--format svg|png|jpg|gif` optional output format override. If omitted, the CLI infers one format from `--output`; `--output -` defaults to `svg`.
 - `--count <N>` optimization steps. Default: `100`.
 - `--shape any|triangle|rectangle|ellipse|circle|rotated-rectangle|quadratic|rotated-ellipse|polygon`. Default: `any`.
-- `--alpha <N>|auto` shape opacity. Accepted values: `1..255` or `auto`. Default: `128`.
+- `--alpha <N>` shape opacity. Accepted values: `0..255` where `0` means `auto`. Default: `0`.
 - `--background <VALUE>` background color. Use `auto` or a hex color in `RGB`, `RGBA`, `RRGGBB`, or `RRGGBBAA` form, with optional leading `#`. Default: `auto`.
 - `--resize-input <N>` working resolution. Default: `256`.
 - `--output-size <N>` final replay resolution. Default: `1024`.
 - `--repeat <N>` extra candidates per step. Default: `0`.
-- `--threads <N>` worker thread count. Default: available cores.
-- `--seed <N>` deterministic RNG seed. If omitted, the CLI generates one from the system clock.
-- `--save-every <N>` GIF frame cadence. Default: `1`.
+- `--seed <N>` deterministic RNG seed. If omitted, Rust generates one from the system clock.
 - `--progress auto|plain|off` progress reporting mode. Default: `auto`.
 
 CLI notes:
 
-- `--output -` supports exactly one emitted format.
-- GIF output to stdout is not supported.
+- `--output -` currently supports only SVG output.
 
 ## Benchmarks
 
-Using `docs/readme/originals/americangothic.jpg` as the input image, `500` steps per run, and all nine shape modes (`any`, triangle, rectangle, ellipse, circle, rotated rectangle, quadratic, rotated ellipse, polygon), the Rust CLI completed the full matrix in **`1m 18s`** versus **`2m 41s`** for the original Go CLI from [`fogleman/primitive`](https://github.com/fogleman/primitive).
+Using `docs/readme/originals/americangothic.jpg` as the input image, `500` steps per run, and all nine shape modes (`any`, triangle, rectangle, ellipse, circle, rotated rectangle, quadratic, rotated ellipse, polygon), primeval completed the full matrix in **`1m 18s`** versus **`2m 41s`** for the original Go CLI from [`fogleman/primitive`](https://github.com/fogleman/primitive).
 
 That works out to a **`2.06x` speedup overall** (`51.5%` less total time). On this run, Rust was **faster in all 9 modes** and delivered **`4.0%` lower average RMSE** overall (`15.97` vs `16.63`). It also produced lower RMSE in 7 of the 9 individual modes.
 
