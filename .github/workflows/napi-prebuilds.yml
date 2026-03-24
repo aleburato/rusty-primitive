@@ -1,0 +1,117 @@
+name: NAPI Prebuilds
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    uses: ./.github/workflows/quality.yml
+
+  target-matrix:
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.targets.outputs.matrix }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+
+      - id: targets
+        run: echo "matrix=$(node scripts/napi-targets.mjs release-matrix)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: target-matrix
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.target-matrix.outputs.matrix) }}
+
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.93.0
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build native addon
+        run: npx napi build -p primeval-node --release --target ${{ matrix.target }} --platform --output-dir .
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.target }}
+          path: primeval-node.*.node
+          if-no-files-found: error
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      NPM_CONFIG_PROVENANCE: "true"
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+
+      - name: Create platform package dirs
+        run: npx napi create-npm-dirs --npm-dir npm
+
+      - name: Copy native artifacts into platform packages
+        run: npx napi artifacts --output-dir artifacts --npm-dir npm
+
+      - name: Verify native package completeness
+        run: node scripts/napi-targets.mjs verify-artifacts npm
+
+      - name: Publish platform packages
+        run: npx napi pre-publish -t npm --npm-dir npm
+
+      - name: Publish npm package
+        run: npm publish --access public

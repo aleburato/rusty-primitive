@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Benchmark script that runs the primitive algorithm with different shape types,
+Benchmark script that runs the primeval algorithm with different shape types,
 collects performance metrics, and generates an HTML report.
 
 Optionally compares two binaries side-by-side.
@@ -19,7 +19,7 @@ from typing import Optional
 from datetime import datetime
 from PIL import Image
 
-DEFAULT_BIN_A = Path("./target/release/primitive-cli")
+DEFAULT_BIN_A = Path("./target/release/primeval-cli")
 DEFAULT_BUILD_CMD = [
     "cargo",
     "build",
@@ -27,7 +27,7 @@ DEFAULT_BUILD_CMD = [
     "--manifest-path",
     "Cargo.toml",
     "--bin",
-    "primitive-cli",
+    "primeval-cli",
 ]
 OUTPUT_DIR = Path("output")
 
@@ -451,7 +451,7 @@ _OVERLAY_JS = """
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description="Benchmark primitive shape types")
+    p = argparse.ArgumentParser(description="Benchmark primeval shape types")
     p.add_argument(
         "--bin-a",
         default=str(DEFAULT_BIN_A),
@@ -920,7 +920,7 @@ def generate_comparison_html(results_a, results_b, label_a, label_b, args):
 {_OVERLAY_HTML}
 <div class="header">
     <div class="header-left">
-        <p class="header-eyebrow">Primitive Benchmark</p>
+        <p class="header-eyebrow">Primeval Benchmark</p>
         <h1 class="header-title">{label_a}<span class="sep">×</span>{label_b}</h1>
     </div>
     <div class="header-right">
@@ -1061,12 +1061,12 @@ def generate_single_html(results, args):
         '<!DOCTYPE html>\n<html lang="en">\n<head>\n',
         '    <meta charset="UTF-8">\n',
         '    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n',
-        f'    <title>Primitive Benchmark — {label}</title>\n',
+        f'    <title>Primeval Benchmark — {label}</title>\n',
         f'    <style>{css}</style>\n',
         '</head>\n<body>\n',
         '<div class="header">\n',
         '    <div class="header-left">\n',
-        '        <p class="header-eyebrow">Primitive Benchmark</p>\n',
+        '        <p class="header-eyebrow">Primeval Benchmark</p>\n',
         f'        <h1 class="header-title">{label}</h1>\n',
         '    </div>\n',
         '    <div class="header-right">\n',
@@ -1211,9 +1211,9 @@ def main():
 
     print("\n" + "=" * 60)
     if args.bin_b:
-        print(f"  Primitive Benchmark — {label_a} vs {label_b}")
+        print(f"  Primeval Benchmark — {label_a} vs {label_b}")
     else:
-        print(f"  Primitive Benchmark — {args.steps} steps per shape")
+        print(f"  Primeval Benchmark — {args.steps} steps per shape")
     print("=" * 60 + "\n")
     print("Shapes:", ", ".join(name for _, name in selected_shapes), "\n")
 

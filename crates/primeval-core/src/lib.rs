@@ -1,4 +1,4 @@
-//! Core library for the primitive image approximation engine.
+//! Core library for the primeval image approximation engine.
 //!
 //! Provides the fundamental types and algorithms for approximating images
 //! through geometric primitives: pixel buffers, color representation,
@@ -24,5 +24,6 @@ pub(crate) mod test_util;
 
 pub use buffer::Buffer;
 pub use color::Color;
+pub use export::OutputFormat;
 pub use model::{CommittedShape, Model, ModelOptions};
 pub use scanline::Scanline;

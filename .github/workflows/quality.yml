@@ -1,0 +1,88 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+  workflow_call:
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  rust-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.93.0
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: cargo fmt --check
+
+      - run: cargo clippy --all-targets -- -D warnings
+
+      - run: cargo test
+
+  package-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20, 24]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.93.0
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+
+      - run: npm run check:napi-targets
+
+      - run: npm run test:tooling
+
+      - run: npm run typecheck
+
+      - run: npm test
+
+      - run: npm pack --dry-run
+
+  hygiene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.93.0
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install typos-cli
+        run: cargo install typos-cli --version 1.44.0 --locked
+
+      - name: Check spelling
+        run: typos --force-exclude .

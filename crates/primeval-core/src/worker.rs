@@ -11,7 +11,7 @@ use crate::scanline::Scanline;
 use crate::score;
 use crate::shapes::{Shape, ShapeKind};
 use crate::state::State;
-use rand::Rng;
+use rand::{Rng, RngExt};
 
 /// Fraction of samples drawn from the error-biased distribution.
 /// The remaining `1 - BIASED_SAMPLING_RATE` are drawn uniformly.
@@ -145,11 +145,11 @@ impl<R: Rng> WorkerCtx<R> {
     /// from the error grid's CDF; otherwise it is drawn uniformly.
     #[inline]
     pub fn sample_xy(&mut self, round: &SearchRound<'_>) -> (i32, i32) {
-        if self.rng.gen::<f64>() < BIASED_SAMPLING_RATE {
+        if self.rng.random::<f64>() < BIASED_SAMPLING_RATE {
             round.error_grid.sample(&mut self.rng)
         } else {
-            let x = self.rng.gen_range(0..self.width);
-            let y = self.rng.gen_range(0..self.height);
+            let x = self.rng.random_range(0..self.width);
+            let y = self.rng.random_range(0..self.height);
             (x, y)
         }
     }
@@ -160,11 +160,11 @@ impl<R: Rng> WorkerCtx<R> {
     /// from the error grid's CDF; otherwise it is drawn uniformly.
     #[inline]
     pub fn sample_xy_float(&mut self, round: &SearchRound<'_>) -> (f64, f64) {
-        if self.rng.gen::<f64>() < BIASED_SAMPLING_RATE {
+        if self.rng.random::<f64>() < BIASED_SAMPLING_RATE {
             round.error_grid.sample_float(&mut self.rng)
         } else {
-            let x = self.rng.gen::<f64>() * self.width as f64;
-            let y = self.rng.gen::<f64>() * self.height as f64;
+            let x = self.rng.random::<f64>() * self.width as f64;
+            let y = self.rng.random::<f64>() * self.height as f64;
             (x, y)
         }
     }

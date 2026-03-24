@@ -1,8 +1,10 @@
-# primitive
+# primeval
 
-`primitive` turns photos and artwork into **stylized reconstructions built from simple geometric shapes**.
+`primeval` turns photos and artwork into **stylized reconstructions built from simple geometric shapes**.
 
 Give it an input image and it searches for a layered approximation you can export as **PNG, JPG, GIF, or clean SVG** output.
+
+<!-- markdownlint-disable MD033 -->
 
 <table>
   <tr>
@@ -19,7 +21,7 @@ Give it an input image and it searches for a layered approximation you can expor
   </tr>
 </table>
 
-Inspired by Michael Fogleman's original [`primitive`](https://github.com/fogleman/primitive), this repository is an **independent Rust implementation** with a reusable core library (`primitive-core`) and a CLI (`primitive-cli`).
+Inspired by Michael Fogleman's original [`primitive`](https://github.com/fogleman/primitive), this repository is an **independent Rust implementation** with a reusable core library (`primeval-core`), a CLI (`primeval-cli`), and an ESM-only Node package (`@aleburato/primeval`).
 
 ## Highlights
 
@@ -30,23 +32,28 @@ Inspired by Michael Fogleman's original [`primitive`](https://github.com/foglema
 
 ## Install
 
-Clone the standalone repository:
+### Node package
 
 ```bash
-git clone git@github.com:aleburato/rusty-primitive.git
-cd rusty-primitive
+npm install @aleburato/primeval
 ```
 
-Build the release binary from the workspace:
+Prebuilt native addons are provided for macOS (arm64, x64), Linux (arm64, x64), and Windows (x64). Node 20+ is required.
+
+### CLI from source
+
+Clone the repository and build the release binary:
 
 ```bash
+git clone git@github.com:aleburato/primeval.git
+cd primeval
 cargo build --release
 ```
 
-Or install the CLI locally:
+Or install the CLI directly:
 
 ```bash
-cargo install --path crates/primitive-cli
+cargo install --path crates/primeval-cli
 ```
 
 ## Quick Start
@@ -54,28 +61,112 @@ cargo install --path crates/primitive-cli
 Run the CLI against one of the bundled README originals:
 
 ```bash
-./target/release/primitive-cli run \
+./target/release/primeval-cli run \
   docs/readme/originals/monalisa.jpg \
   --output output/monalisa.png \
   --emit png,svg \
-  --count 1000 \
-  --shape any
+  --count 1000
 ```
 
 Useful options:
 
-- `--shape any|triangle|rectangle|ellipse|circle|rotated-rectangle|quadratic|rotated-ellipse|polygon`
-- `--count <N>` to control the number of optimization steps
-- `--resize-input <N>` to set the working resolution (default `256`)
-- `--output-size <N>` to set the final replay resolution (default `1024`)
+- `--shape any|triangle|rectangle|ellipse|circle|rotated-rectangle|quadratic|rotated-ellipse|polygon` with `any` as the default
+- `--count <N>` number of optimization steps (default `100`)
+- `--alpha <N>|auto` shape opacity, `1`..`255` or `auto` (default `128`)
+- `--resize-input <N>` working resolution (default `256`)
+- `--output-size <N>` final replay resolution (default `1024`)
+- `--repeat <N>` extra candidates per step (default `0`)
+- `--threads <N>` worker thread count (defaults to available cores)
 - `--seed <N>` for deterministic output
-- `--emit png,jpg,svg,gif` to choose one or more output formats
+- `--emit png,jpg,svg,gif` one or more output formats
 
 See the full CLI help with:
 
 ```bash
-./target/release/primitive-cli run --help
+./target/release/primeval-cli run --help
 ```
+
+## Node Package
+
+The npm package is **ESM-only** and targets **Node 20+**.
+
+```js
+import { approximate } from "@aleburato/primeval";
+import { readFile } from "node:fs/promises";
+
+const input = await readFile("docs/readme/originals/monalisa.jpg");
+
+const result = await approximate({
+  input: { kind: "bytes", data: input },
+  output: "svg",
+  render: {
+    count: 300,
+    shape: "any",
+  },
+});
+
+console.log(result.format, result.width, result.height);
+console.log(result.data.slice(0, 32));
+```
+
+Convert results to a data URI:
+
+```js
+import { approximate, toDataUri } from "@aleburato/primeval";
+import { readFile } from "node:fs/promises";
+
+const input = await readFile("docs/readme/originals/monalisa.jpg");
+const result = await approximate({
+  input: { kind: "bytes", data: input },
+  output: "png",
+  render: { count: 200 },
+});
+
+const uri = toDataUri(result);
+console.log(uri.slice(0, 64));
+```
+
+Abort long renders with `AbortSignal`:
+
+```js
+import { AbortError, approximate } from "@aleburato/primeval";
+import { readFile } from "node:fs/promises";
+
+const controller = new AbortController();
+const input = await readFile("docs/readme/originals/monalisa.jpg");
+
+try {
+  const promise = approximate({
+    input: { kind: "bytes", data: input },
+    output: "svg",
+    render: { count: 1000 },
+    execution: {
+      signal: controller.signal,
+      onProgress(info) {
+        if (info.step === 10) {
+          controller.abort();
+        }
+      },
+    },
+  });
+
+  await promise;
+} catch (error) {
+  if (error instanceof AbortError) {
+    console.log("render aborted");
+  } else {
+    throw error;
+  }
+}
+```
+
+Package notes:
+
+- Default render options match the Rust render facade and CLI defaults: `count: 100`, `shape: "any"`, `alpha: 128`, `repeat: 0`, `background: "auto"`, `resizeInput: 256`, and `outputSize: 1024`.
+- `approximate()` returns exactly one output format per call: `svg`, `png`, `jpg`, or `gif`.
+- The default shape is `any` (mixed); all nine CLI shape modes are available.
+- Errors are mapped to `ValidationError`, `NotFoundError`, and `AbortError` — use `instanceof` to distinguish them.
+- For SVG results, `data` is a `string`; for raster results, `data` is a `Buffer`.
 
 ## Progression Gallery
 
@@ -1009,6 +1100,8 @@ Each table below shows one original image, with shape modes in rows and step cou
   </tr>
 </table>
 
+<!-- markdownlint-enable MD033 -->
+
 ## Benchmarks
 
 Using `docs/readme/originals/americangothic.jpg` as the input image, `500` steps per run, and all nine shape modes (`any`, triangle, rectangle, ellipse, circle, rotated rectangle, quadratic, rotated ellipse, polygon), the Rust CLI completed the full matrix in **`1m 18s`** versus **`2m 41s`** for the original Go CLI from [`fogleman/primitive`](https://github.com/fogleman/primitive).
@@ -1017,34 +1110,51 @@ That works out to a **`2.06x` speedup overall** (`51.5%` less total time). On th
 
 | Shape | Rust time | Go time | Speedup | Rust RMSE | Go RMSE |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Mixed | 7.57s | 14.64s | 1.93x | 12.27 | 13.57 |
-| Triangle | 4.03s | 9.13s | 2.27x | 14.38 | 14.64 |
-| Rectangle | 2.53s | 7.06s | 2.80x | 15.23 | 14.55 |
-| Ellipse | 5.56s | 18.17s | 3.27x | 12.34 | 12.57 |
-| Circle | 7.59s | 21.68s | 2.86x | 14.23 | 14.46 |
-| Rotated rectangle | 4.54s | 9.58s | 2.11x | 12.82 | 14.12 |
-| Quadratic | 6.06s | 23.24s | 3.84x | 39.53 | 38.27 |
-| Rotated ellipse | 24.78s | 39.38s | 1.59x | 11.79 | 13.82 |
-| Polygon | 15.17s | 17.68s | 1.17x | 11.13 | 13.66 |
+| Mixed | 7.6s | 14.6s | 1.9x | 12.3 | 13.6 |
+| Triangle | 4.0s | 9.1s | 2.3x | 14.4 | 14.6 |
+| Rectangle | 2.5s | 7.1s | 2.8x | 15.2 | 14.6 |
+| Ellipse | 5.6s | 18.2s | 3.3x | 12.3 | 12.6 |
+| Circle | 7.6s | 21.7s | 2.9x | 14.2 | 14.5 |
+| Rotated rectangle | 4.5s | 9.6s | 2.1x | 12.8 | 14.1 |
+| Quadratic | 6.1s | 23.2s | 3.8x | 39.5 | 38.3 |
+| Rotated ellipse | 24.8s | 39.4s | 1.6x | 11.8 | 13.8 |
+| Polygon | 15.2s | 17.7s | 1.2x | 11.1 | 13.7 |
 
 *Lower RMSE is better.* Times are from a single local benchmark run and will vary by machine. The upstream Go CLI does not expose a fixed seed flag, so the quality comparison reflects one representative run rather than a deterministic seed-matched replay.
 
 ## Usage in the Wild
 
-Real projects using `primitive` beyond demos and benchmarks:
+Real projects using `primeval` beyond demos and benchmarks:
 
-- [nudaluce.com](https://nudaluce.com) *(NSFW)* — my photography website uses `primitive`-generated SVGs as **LQIPs** (low-quality image placeholders), replacing the more typical blurred-image placeholder technique with geometric previews.
+- [nudaluce.com](https://nudaluce.com) *(NSFW)* — my photography website uses `primeval`-generated SVGs as **LQIPs** (low-quality image placeholders), replacing the more typical blurred-image placeholder technique with geometric previews.
 
 > **Want your project listed here?** Send an email to [ale.burato@icloud.com](mailto:ale.burato@icloud.com) with the URL of the related resource.
 
 ## Development
 
-Run the standard Rust quality gates from the repository root:
+Run the standard quality gates from the repository root:
 
 ```bash
+# Rust
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo test
+
+# Node / package
+npm run typecheck
+npm test
+npm run test:tooling
+npm pack --dry-run
+```
+
+`npm test` builds the TypeScript wrapper and native addon before running the full package test suite, including the native-path tests.
+
+For local development when you want the native build step by itself:
+
+```bash
+npm ci
+npm run test:native:build
+npm run test:native
 ```
 
 The comparison harness lives at [`scripts/benchmark.py`](scripts/benchmark.py). It can compare any two compatible binaries and writes reports to `output/`.

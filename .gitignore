@@ -3,12 +3,17 @@
 /*.gif
 /.venv/
 /bin/
+/dist/
 /output/
 /target/
 __pycache__/
 *.py[cod]
 
-# profiling artifacts – use /tmp/primitive-profile-artifacts/ instead
+# Node
+node_modules/
+*.node
+
+# profiling artifacts – use /tmp/primeval-profile-artifacts/ instead
 /collapsed.txt
 /trace_table.xml
 /cargo-flamegraph.trace

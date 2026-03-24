@@ -1,6 +1,6 @@
 use crate::shapes::Shape;
 use crate::worker::{SearchRound, WorkerCtx};
-use rand::Rng;
+use rand::{Rng, RngExt};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AlphaMode {
@@ -54,7 +54,7 @@ impl State {
         let previous = self.clone();
         self.shape.mutate(worker, round);
         if self.alpha_mode == AlphaMode::Auto {
-            let delta = worker.rng.gen_range(0..21) - 10;
+            let delta = worker.rng.random_range(0..21) - 10;
             self.alpha = (i32::from(self.alpha) + delta).clamp(1, 255) as u8;
         }
         self.cached_energy = None;

@@ -1,5 +1,5 @@
 [package]
-name = "primitive-cli"
+name = "primeval-cli"
 version = "0.1.0"
 edition = "2021"
 homepage.workspace = true
@@ -12,4 +12,5 @@ workspace = true
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
 ctrlc = "3.4"
-primitive-core = { path = "../primitive-core" }
+primeval-core = { path = "../primeval-core" }
+primeval-render = { path = "../primeval-render" }

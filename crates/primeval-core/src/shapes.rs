@@ -1,8 +1,9 @@
 use crate::scanline::Scanline;
 use crate::util::{degrees, radians, rotate_sc};
 use crate::worker::{SearchRound, WorkerCtx};
-use rand::Rng;
+use rand::{Rng, RngExt};
 use rand_distr::{Distribution, StandardNormal};
+use std::str::FromStr;
 
 const POSITION_SIGMA: f64 = 16.0;
 const ANGLE_SIGMA: f64 = 32.0;
@@ -111,7 +112,7 @@ impl Shape {
     ) -> Self {
         let kind = match kind {
             ShapeKind::Any => {
-                ShapeKind::all_kinds()[worker.rng.gen_range(0..ShapeKind::all_kinds().len())]
+                ShapeKind::all_kinds()[worker.rng.random_range(0..ShapeKind::all_kinds().len())]
             }
             other => other,
         };
@@ -189,6 +190,36 @@ impl Shape {
 }
 
 impl ShapeKind {
+    #[must_use]
+    pub const fn variants() -> &'static [&'static str] {
+        &[
+            "any",
+            "triangle",
+            "rectangle",
+            "ellipse",
+            "circle",
+            "rotated-rectangle",
+            "quadratic",
+            "rotated-ellipse",
+            "polygon",
+        ]
+    }
+
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            ShapeKind::Any => "any",
+            ShapeKind::Triangle => "triangle",
+            ShapeKind::Rectangle => "rectangle",
+            ShapeKind::Ellipse => "ellipse",
+            ShapeKind::Circle => "circle",
+            ShapeKind::RotatedRectangle => "rotated-rectangle",
+            ShapeKind::Quadratic => "quadratic",
+            ShapeKind::RotatedEllipse => "rotated-ellipse",
+            ShapeKind::Polygon => "polygon",
+        }
+    }
+
     const fn all_kinds() -> &'static [ShapeKind] {
         &[
             ShapeKind::Triangle,
@@ -200,6 +231,25 @@ impl ShapeKind {
             ShapeKind::RotatedEllipse,
             ShapeKind::Polygon,
         ]
+    }
+}
+
+impl FromStr for ShapeKind {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "any" => Ok(Self::Any),
+            "triangle" => Ok(Self::Triangle),
+            "rectangle" => Ok(Self::Rectangle),
+            "ellipse" => Ok(Self::Ellipse),
+            "circle" => Ok(Self::Circle),
+            "rotated-rectangle" => Ok(Self::RotatedRectangle),
+            "quadratic" => Ok(Self::Quadratic),
+            "rotated-ellipse" => Ok(Self::RotatedEllipse),
+            "polygon" => Ok(Self::Polygon),
+            other => Err(format!("unknown shape: {other}")),
+        }
     }
 }
 
@@ -218,10 +268,10 @@ impl Triangle {
 
     fn random<R: Rng>(worker: &mut WorkerCtx<R>, round: &SearchRound<'_>) -> Self {
         let (x1, y1) = worker.sample_xy(round);
-        let x2 = x1 + worker.rng.gen_range(0..31) - 15;
-        let y2 = y1 + worker.rng.gen_range(0..31) - 15;
-        let x3 = x1 + worker.rng.gen_range(0..31) - 15;
-        let y3 = y1 + worker.rng.gen_range(0..31) - 15;
+        let x2 = x1 + worker.rng.random_range(0..31) - 15;
+        let y2 = y1 + worker.rng.random_range(0..31) - 15;
+        let x3 = x1 + worker.rng.random_range(0..31) - 15;
+        let y3 = y1 + worker.rng.random_range(0..31) - 15;
         let mut triangle = Self {
             x1,
             y1,
@@ -290,7 +340,7 @@ impl Triangle {
     fn mutate<R: Rng>(&mut self, worker: &mut WorkerCtx<R>) {
         const MARGIN: i32 = 16;
         loop {
-            match worker.rng.gen_range(0..3) {
+            match worker.rng.random_range(0..3) {
                 0 => {
                     self.x1 = (self.x1 + gaussian_sample(&mut worker.rng, POSITION_SIGMA) as i32)
                         .clamp(-MARGIN, worker.width - 1 + MARGIN);
@@ -337,8 +387,8 @@ impl Rectangle {
 
     fn random<R: Rng>(worker: &mut WorkerCtx<R>, round: &SearchRound<'_>) -> Self {
         let (x1, y1) = worker.sample_xy(round);
-        let x2 = (x1 + worker.rng.gen_range(1..33)).clamp(0, worker.width - 1);
-        let y2 = (y1 + worker.rng.gen_range(1..33)).clamp(0, worker.height - 1);
+        let x2 = (x1 + worker.rng.random_range(1..33)).clamp(0, worker.width - 1);
+        let y2 = (y1 + worker.rng.random_range(1..33)).clamp(0, worker.height - 1);
         Self { x1, y1, x2, y2 }
     }
 
@@ -369,7 +419,7 @@ impl Rectangle {
     }
 
     fn mutate<R: Rng>(&mut self, worker: &mut WorkerCtx<R>) {
-        match worker.rng.gen_range(0..2) {
+        match worker.rng.random_range(0..2) {
             0 => {
                 self.x1 = (self.x1 + gaussian_sample(&mut worker.rng, POSITION_SIGMA) as i32)
                     .clamp(0, worker.width - 1);
@@ -414,8 +464,8 @@ impl Ellipse {
         Self {
             x,
             y,
-            rx: worker.rng.gen_range(1..33),
-            ry: worker.rng.gen_range(1..33),
+            rx: worker.rng.random_range(1..33),
+            ry: worker.rng.random_range(1..33),
         }
     }
 
@@ -424,7 +474,7 @@ impl Ellipse {
     }
 
     fn mutate<R: Rng>(&mut self, worker: &mut WorkerCtx<R>) {
-        match worker.rng.gen_range(0..3) {
+        match worker.rng.random_range(0..3) {
             0 => {
                 self.x = (self.x + gaussian_sample(&mut worker.rng, POSITION_SIGMA) as i32)
                     .clamp(0, worker.width - 1);
@@ -465,7 +515,7 @@ impl Circle {
         Self {
             x,
             y,
-            r: worker.rng.gen_range(1..33),
+            r: worker.rng.random_range(1..33),
         }
     }
 
@@ -474,7 +524,7 @@ impl Circle {
     }
 
     fn mutate<R: Rng>(&mut self, worker: &mut WorkerCtx<R>) {
-        match worker.rng.gen_range(0..3) {
+        match worker.rng.random_range(0..3) {
             0 => {
                 self.x = (self.x + gaussian_sample(&mut worker.rng, POSITION_SIGMA) as i32)
                     .clamp(0, worker.width - 1);
@@ -490,8 +540,8 @@ impl Circle {
 
     fn svg_element(&self, attrs: &str) -> String {
         format!(
-            "<ellipse {} cx=\"{}\" cy=\"{}\" rx=\"{}\" ry=\"{}\" />",
-            attrs, self.x, self.y, self.r, self.r
+            "<circle {} cx=\"{}\" cy=\"{}\" r=\"{}\" />",
+            attrs, self.x, self.y, self.r
         )
     }
 }
@@ -513,9 +563,9 @@ impl RotatedRectangle {
         let mut rect = Self {
             x,
             y,
-            sx: worker.rng.gen_range(1..33),
-            sy: worker.rng.gen_range(1..33),
-            angle: worker.rng.gen_range(0..360),
+            sx: worker.rng.random_range(1..33),
+            sy: worker.rng.random_range(1..33),
+            angle: worker.rng.random_range(0..360),
         };
         rect.mutate(worker);
         rect
@@ -592,7 +642,7 @@ impl RotatedRectangle {
     }
 
     fn mutate<R: Rng>(&mut self, worker: &mut WorkerCtx<R>) {
-        match worker.rng.gen_range(0..3) {
+        match worker.rng.random_range(0..3) {
             0 => {
                 self.x = (self.x + gaussian_sample(&mut worker.rng, POSITION_SIGMA) as i32)
                     .clamp(0, worker.width - 1);
@@ -634,10 +684,10 @@ impl Quadratic {
 
     fn random<R: Rng>(worker: &mut WorkerCtx<R>, round: &SearchRound<'_>) -> Self {
         let (x1, y1) = worker.sample_xy_float(round);
-        let x2 = x1 + worker.rng.gen::<f64>() * 40.0 - 20.0;
-        let y2 = y1 + worker.rng.gen::<f64>() * 40.0 - 20.0;
-        let x3 = x2 + worker.rng.gen::<f64>() * 40.0 - 20.0;
-        let y3 = y2 + worker.rng.gen::<f64>() * 40.0 - 20.0;
+        let x2 = x1 + worker.rng.random::<f64>() * 40.0 - 20.0;
+        let y2 = y1 + worker.rng.random::<f64>() * 40.0 - 20.0;
+        let x3 = x2 + worker.rng.random::<f64>() * 40.0 - 20.0;
+        let y3 = y2 + worker.rng.random::<f64>() * 40.0 - 20.0;
         let mut quadratic = Self {
             x1,
             y1,
@@ -653,12 +703,12 @@ impl Quadratic {
 
     #[must_use]
     pub fn is_valid(&self) -> bool {
-        let dx12 = (self.x1 - self.x2) as i32;
-        let dy12 = (self.y1 - self.y2) as i32;
-        let dx23 = (self.x2 - self.x3) as i32;
-        let dy23 = (self.y2 - self.y3) as i32;
-        let dx13 = (self.x1 - self.x3) as i32;
-        let dy13 = (self.y1 - self.y3) as i32;
+        let dx12 = self.x1 - self.x2;
+        let dy12 = self.y1 - self.y2;
+        let dx23 = self.x2 - self.x3;
+        let dy23 = self.y2 - self.y3;
+        let dx13 = self.x1 - self.x3;
+        let dy13 = self.y1 - self.y3;
         let d12 = dx12 * dx12 + dy12 * dy12;
         let d23 = dx23 * dx23 + dy23 * dy23;
         let d13 = dx13 * dx13 + dy13 * dy13;
@@ -729,6 +779,10 @@ impl Quadratic {
                 self.y3 = final_y;
             }
         }
+
+        if !self.is_valid() {
+            self.repair_control_point(width, height);
+        }
     }
 
     /// Repair a control-point mutation by projecting the control point back
@@ -791,6 +845,28 @@ impl Quadratic {
             self.x2 = mid_x.clamp(min_coord, max_x);
             self.y2 = mid_y.clamp(min_coord, max_y);
         }
+        if !self.is_valid() {
+            self.force_valid_geometry(width, height);
+        }
+    }
+
+    fn force_valid_geometry(&mut self, width: i32, height: i32) {
+        let min_coord = -Self::MUTATE_MARGIN;
+        let max_x = f64::from(width - 1) + Self::MUTATE_MARGIN;
+        let max_y = f64::from(height - 1) + Self::MUTATE_MARGIN;
+
+        self.x1 = 0.0_f64.clamp(min_coord, max_x);
+        self.y1 = 0.0_f64.clamp(min_coord, max_y);
+        self.x3 = (self.x1 + 2.0).clamp(min_coord, max_x);
+        self.y3 = self.y1;
+
+        if (self.x3 - self.x1).abs() < 2.0 {
+            self.x3 = self.x1;
+            self.y3 = (self.y1 + 2.0).clamp(min_coord, max_y);
+        }
+
+        self.x2 = ((self.x1 + self.x3) * 0.5).clamp(min_coord, max_x);
+        self.y2 = ((self.y1 + self.y3) * 0.5).clamp(min_coord, max_y);
     }
 
     fn rasterize<'a, R: Rng>(&self, worker: &'a mut WorkerCtx<R>) -> &'a [Scanline] {
@@ -811,7 +887,7 @@ impl Quadratic {
         let max_x = f64::from(worker.width - 1) + Self::MUTATE_MARGIN;
         let max_y = f64::from(worker.height - 1) + Self::MUTATE_MARGIN;
         let old = *self;
-        let choice = worker.rng.gen_range(0..3u32);
+        let choice = worker.rng.random_range(0..3u32);
 
         for _ in 0..Self::MAX_MUTATE_ATTEMPTS {
             match choice {
@@ -873,9 +949,9 @@ impl RotatedEllipse {
         Self {
             x,
             y,
-            rx: worker.rng.gen::<f64>() * 32.0 + 1.0,
-            ry: worker.rng.gen::<f64>() * 32.0 + 1.0,
-            angle: worker.rng.gen::<f64>() * 360.0,
+            rx: worker.rng.random::<f64>() * 32.0 + 1.0,
+            ry: worker.rng.random::<f64>() * 32.0 + 1.0,
+            angle: worker.rng.random::<f64>() * 360.0,
         }
     }
 
@@ -894,7 +970,7 @@ impl RotatedEllipse {
     }
 
     fn mutate<R: Rng>(&mut self, worker: &mut WorkerCtx<R>) {
-        match worker.rng.gen_range(0..3) {
+        match worker.rng.random_range(0..3) {
             0 => {
                 self.x = (self.x + gaussian_sample(&mut worker.rng, POSITION_SIGMA))
                     .clamp(0.0, f64::from(worker.width - 1));
@@ -946,8 +1022,8 @@ impl Polygon {
         x[0] = x0;
         y[0] = y0;
         for i in 1..order {
-            x[i] = x0 + worker.rng.gen::<f64>() * 40.0 - 20.0;
-            y[i] = y0 + worker.rng.gen::<f64>() * 40.0 - 20.0;
+            x[i] = x0 + worker.rng.random::<f64>() * 40.0 - 20.0;
+            y[i] = y0 + worker.rng.random::<f64>() * 40.0 - 20.0;
         }
         let mut polygon = Self {
             order,
@@ -1000,13 +1076,13 @@ impl Polygon {
     fn mutate<R: Rng>(&mut self, worker: &mut WorkerCtx<R>) {
         const MARGIN: f64 = 16.0;
         loop {
-            if worker.rng.gen::<f64>() < 0.25 {
-                let i = worker.rng.gen_range(0..self.order);
-                let j = worker.rng.gen_range(0..self.order);
+            if worker.rng.random::<f64>() < 0.25 {
+                let i = worker.rng.random_range(0..self.order);
+                let j = worker.rng.random_range(0..self.order);
                 self.x.swap(i, j);
                 self.y.swap(i, j);
             } else {
-                let i = worker.rng.gen_range(0..self.order);
+                let i = worker.rng.random_range(0..self.order);
                 self.x[i] = (self.x[i] + gaussian_sample(&mut worker.rng, POSITION_SIGMA))
                     .clamp(-MARGIN, f64::from(worker.width - 1) + MARGIN);
                 self.y[i] = (self.y[i] + gaussian_sample(&mut worker.rng, POSITION_SIGMA))
@@ -1182,6 +1258,31 @@ mod tests {
     }
 
     #[test]
+    fn shape_kind_round_trips_public_names() {
+        let cases = [
+            (ShapeKind::Any, "any"),
+            (ShapeKind::Triangle, "triangle"),
+            (ShapeKind::Rectangle, "rectangle"),
+            (ShapeKind::Ellipse, "ellipse"),
+            (ShapeKind::Circle, "circle"),
+            (ShapeKind::RotatedRectangle, "rotated-rectangle"),
+            (ShapeKind::Quadratic, "quadratic"),
+            (ShapeKind::RotatedEllipse, "rotated-ellipse"),
+            (ShapeKind::Polygon, "polygon"),
+        ];
+
+        for (kind, value) in cases {
+            assert_eq!(kind.as_str(), value);
+            assert_eq!(value.parse::<ShapeKind>().expect("shape kind"), kind);
+        }
+    }
+
+    #[test]
+    fn shape_kind_rejects_unknown_name() {
+        assert!("hexagon".parse::<ShapeKind>().is_err());
+    }
+
+    #[test]
     fn triangle_validity_rejects_collinear_points() {
         let triangle = Triangle {
             x1: 0,
@@ -1265,11 +1366,11 @@ mod tests {
     }
 
     #[test]
-    fn circle_svg_uses_equal_radii() {
+    fn circle_svg_emits_circle_element() {
         let shape = Shape::Circle(Circle { x: 10, y: 20, r: 7 });
         assert_eq!(
             shape.to_svg("fill='red'"),
-            "<ellipse fill='red' cx=\"10\" cy=\"20\" rx=\"7\" ry=\"7\" />"
+            "<circle fill='red' cx=\"10\" cy=\"20\" r=\"7\" />"
         );
     }
 
@@ -1458,6 +1559,24 @@ mod tests {
         assert_eq!(quadratic.y1, old.y1);
         assert_eq!(quadratic.x3, old.x3);
         assert_eq!(quadratic.y3, old.y3);
+    }
+
+    #[test]
+    fn quadratic_is_valid_uses_f64_precision() {
+        // Sub-pixel differences must not be lost to integer truncation.
+        let q = Quadratic {
+            x1: 0.0,
+            y1: 0.0,
+            x2: 0.5,
+            y2: 0.0,
+            x3: 0.9,
+            y3: 0.0,
+            width: 0.5,
+        };
+        assert!(
+            q.is_valid(),
+            "sub-pixel quadratic should be valid with f64 precision"
+        );
     }
 
     #[test]

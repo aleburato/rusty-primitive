@@ -1,0 +1,65 @@
+{
+  "name": "@aleburato/primeval",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "description": "TypeScript-first Node package for primeval image approximation.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:aleburato/primeval.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "build:node": "napi build -p primeval-node --release --output-dir . --dts target/primeval-node.d.ts",
+    "check:napi-targets": "node scripts/napi-targets.mjs check-package",
+    "test:native:build": "npm run build && npm run build:node",
+    "test:native": "node --test test/native.test.js",
+    "typecheck": "tsc --noEmit",
+    "pretest": "npm run build && npm run build:node",
+    "test": "node --test test/index.test.js test/contracts.test.js test/native.test.js",
+    "test:tooling": "node --test test/tooling/*.test.js",
+    "prepack": "tsc"
+  },
+  "optionalDependencies": {
+    "@aleburato/primeval-darwin-arm64": "0.1.0",
+    "@aleburato/primeval-darwin-x64": "0.1.0",
+    "@aleburato/primeval-linux-arm64-gnu": "0.1.0",
+    "@aleburato/primeval-linux-x64-gnu": "0.1.0",
+    "@aleburato/primeval-win32-x64-msvc": "0.1.0"
+  },
+  "napi": {
+    "binaryName": "primeval-node",
+    "targets": [
+      "aarch64-apple-darwin",
+      "x86_64-apple-darwin",
+      "aarch64-unknown-linux-gnu",
+      "x86_64-unknown-linux-gnu",
+      "x86_64-pc-windows-msvc"
+    ]
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.5.1",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.4"
+  }
+}

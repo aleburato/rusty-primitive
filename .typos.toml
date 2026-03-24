@@ -1,0 +1,20 @@
+[default]
+extend-ignore-identifiers-re = [
+  "iy(_[a-z]+)?",
+]
+
+[files]
+extend-exclude = [
+  "Cargo.lock",
+  "dist",
+  "node_modules",
+  "output",
+  "package-lock.json",
+  "target",
+  "docs/readme/progression",
+  "docs/readme/thumbs",
+]
+
+[default.extend-identifiers]
+ba = "ba"
+iy = "iy"

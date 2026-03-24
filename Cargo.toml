@@ -1,10 +1,15 @@
 [workspace]
 resolver = "2"
-members = ["crates/primitive-core", "crates/primitive-cli"]
+members = [
+    "crates/primeval-core",
+    "crates/primeval-cli",
+    "crates/primeval-render",
+    "binding",
+]
 
 [workspace.package]
-homepage = "https://primitive.lol/"
-repository = "https://github.com/aleburato/rusty-primitive"
+homepage = "https://github.com/aleburato/primeval"
+repository = "https://github.com/aleburato/primeval"
 license = "MIT"
 
 [workspace.lints.rust]

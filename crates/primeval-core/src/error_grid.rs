@@ -4,7 +4,7 @@
 /// the target and current approximation, and builds a cumulative distribution
 /// function so that random samples concentrate in high-error regions.
 use crate::buffer::Buffer;
-use rand::Rng;
+use rand::{Rng, RngExt};
 
 /// A grid that tracks per-cell RGB error between target and current buffers.
 ///
@@ -30,6 +30,8 @@ impl ErrorGrid {
     /// Cell dimensions are floored to at least 1 pixel.
     #[must_use]
     pub fn new(img_w: u32, img_h: u32, cols: u32, rows: u32) -> Self {
+        let cols = cols.max(1);
+        let rows = rows.max(1);
         let cell_w = (img_w / cols).max(1);
         let cell_h = (img_h / rows).max(1);
         let n = (cols * rows) as usize;
@@ -121,15 +123,25 @@ impl ErrorGrid {
     /// The returned `(x, y)` is guaranteed to be within `[0, img_w) x [0, img_h)`.
     #[must_use]
     pub fn sample<R: Rng>(&self, rng: &mut R) -> (i32, i32) {
-        let r = rng.gen::<f64>() * self.total;
+        if self.total <= 0.0 {
+            if self.img_w == 0 || self.img_h == 0 {
+                return (0, 0);
+            }
+            return (
+                rng.random_range(0..self.img_w) as i32,
+                rng.random_range(0..self.img_h) as i32,
+            );
+        }
+
+        let r = rng.random::<f64>() * self.total;
         let idx = self.cdf.partition_point(|&v| v < r).min(self.cdf.len() - 1);
         let row = idx / self.cols as usize;
         let col = idx % self.cols as usize;
 
         let x_range = self.cell_w as i32;
         let y_range = self.cell_h as i32;
-        let x = col as i32 * x_range + rng.gen_range(0..x_range);
-        let y = row as i32 * y_range + rng.gen_range(0..y_range);
+        let x = col as i32 * x_range + rng.random_range(0..x_range);
+        let y = row as i32 * y_range + rng.random_range(0..y_range);
 
         let x = x.min(self.img_w as i32 - 1);
         let y = y.min(self.img_h as i32 - 1);
@@ -142,13 +154,23 @@ impl ErrorGrid {
     /// `[0.0, img_w as f64) x [0.0, img_h as f64)`.
     #[must_use]
     pub fn sample_float<R: Rng>(&self, rng: &mut R) -> (f64, f64) {
-        let r = rng.gen::<f64>() * self.total;
+        if self.total <= 0.0 {
+            if self.img_w == 0 || self.img_h == 0 {
+                return (0.0, 0.0);
+            }
+            return (
+                rng.random::<f64>() * self.img_w as f64,
+                rng.random::<f64>() * self.img_h as f64,
+            );
+        }
+
+        let r = rng.random::<f64>() * self.total;
         let idx = self.cdf.partition_point(|&v| v < r).min(self.cdf.len() - 1);
         let row = idx / self.cols as usize;
         let col = idx % self.cols as usize;
 
-        let x = col as f64 * self.cell_w as f64 + rng.gen::<f64>() * self.cell_w as f64;
-        let y = row as f64 * self.cell_h as f64 + rng.gen::<f64>() * self.cell_h as f64;
+        let x = col as f64 * self.cell_w as f64 + rng.random::<f64>() * self.cell_w as f64;
+        let y = row as f64 * self.cell_h as f64 + rng.random::<f64>() * self.cell_h as f64;
 
         let x = x.min(self.img_w as f64 - 1.0);
         let y = y.min(self.img_h as f64 - 1.0);
@@ -209,6 +231,15 @@ mod tests {
     }
 
     #[test]
+    fn new_clamps_zero_grid_dimensions() {
+        let g = ErrorGrid::new(20, 20, 0, 0);
+        assert_eq!(g.cols, 1);
+        assert_eq!(g.rows, 1);
+        assert_eq!(g.errors.len(), 1);
+        assert_eq!(g.cdf.len(), 1);
+    }
+
+    #[test]
     fn compute_known_different_buffers_gives_expected_errors() {
         // 4x4 image, 2x2 grid => each cell is 2x2 pixels.
         // Target: all white (255,255,255,255)
@@ -264,6 +295,54 @@ mod tests {
             let (x, y) = g.sample_float(&mut rng);
             assert!((0.0..50.0).contains(&x), "x={x} out of bounds");
             assert!((0.0..30.0).contains(&y), "y={y} out of bounds");
+        }
+    }
+
+    #[test]
+    fn zero_total_sampling_stays_in_bounds_and_does_not_collapse() {
+        let c = Color::new(128, 64, 32, 255);
+        let target = Buffer::new_from_color(20, 20, c);
+        let current = Buffer::new_from_color(20, 20, c);
+        let mut g = ErrorGrid::new(20, 20, 4, 4);
+        g.compute(&target, &current);
+
+        let mut rng = test_rng();
+        let mut sampled_cells = std::collections::BTreeSet::new();
+        let mut sampled_float_cells = std::collections::BTreeSet::new();
+        for _ in 0..128 {
+            let (x, y) = g.sample(&mut rng);
+            assert!((0..20).contains(&x), "x={x} out of bounds");
+            assert!((0..20).contains(&y), "y={y} out of bounds");
+            sampled_cells.insert((x / 5, y / 5));
+
+            let (fx, fy) = g.sample_float(&mut rng);
+            assert!((0.0..20.0).contains(&fx), "x={fx} out of bounds");
+            assert!((0.0..20.0).contains(&fy), "y={fy} out of bounds");
+            sampled_float_cells.insert(((fx / 5.0) as i32, (fy / 5.0) as i32));
+        }
+
+        assert!(
+            sampled_cells.len() > 1,
+            "integer sampling collapsed to one cell"
+        );
+        assert!(
+            sampled_float_cells.len() > 1,
+            "float sampling collapsed to one cell"
+        );
+    }
+
+    #[test]
+    fn zero_dimension_grid_sampling_stays_in_bounds() {
+        let target = Buffer::new_from_color(12, 9, Color::new(255, 255, 255, 255));
+        let current = Buffer::new_from_color(12, 9, Color::new(0, 0, 0, 255));
+        let mut g = ErrorGrid::new(12, 9, 0, 0);
+        g.compute(&target, &current);
+
+        let mut rng = test_rng();
+        for _ in 0..128 {
+            let (x, y) = g.sample(&mut rng);
+            assert!((0..12).contains(&x), "x={x} out of bounds");
+            assert!((0..9).contains(&y), "y={y} out of bounds");
         }
     }
 

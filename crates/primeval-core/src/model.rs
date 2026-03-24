@@ -505,4 +505,26 @@ mod tests {
 
         assert_eq!(second_reported, second_total - first_total);
     }
+
+    #[test]
+    fn new_clamps_zero_grid_dimensions() {
+        let target = Buffer::new_from_color(8, 8, Color::new(255, 255, 255, 255));
+        let mut model = Model::new(
+            target,
+            Color::new(0, 0, 0, 255),
+            8,
+            ModelOptions {
+                seed: Some(7),
+                grid_cols: 0,
+                grid_rows: 0,
+                ..ModelOptions::default()
+            },
+        );
+
+        let evaluations = model
+            .step(ShapeKind::Triangle, 128, 0)
+            .expect("step should succeed");
+
+        assert!(evaluations > 0);
+    }
 }
