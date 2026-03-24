@@ -9,6 +9,9 @@
     "type": "git",
     "url": "git@github.com:aleburato/primeval.git"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {

@@ -4,6 +4,8 @@
 
 Give it an input image and it searches for a layered approximation you can export as **PNG, JPG, GIF, or clean SVG** output.
 
+<!-- markdownlint-disable MD033 -->
+
 <table>
   <tr>
     <td align="center"><img src="docs/readme/thumbs/monalisa/any-200.jpg" alt="Mona Lisa with mixed shapes after 200 steps." width="100%" /></td>
@@ -1097,6 +1099,8 @@ Each table below shows one original image, with shape modes in rows and step cou
     </td>
   </tr>
 </table>
+
+<!-- markdownlint-enable MD033 -->
 
 ## Benchmarks
 

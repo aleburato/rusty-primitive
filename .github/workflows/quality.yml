@@ -11,8 +11,30 @@ permissions:
   contents: read
 
 jobs:
-  checks:
+  rust-checks:
     runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.93.0
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: cargo fmt --check
+
+      - run: cargo clippy --all-targets -- -D warnings
+
+      - run: cargo test
+
+  package-checks:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20, 24]
 
     steps:
       - uses: actions/checkout@v4
@@ -25,7 +47,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ matrix.node-version }}
           cache: npm
 
       - run: npm ci
@@ -33,12 +55,6 @@ jobs:
       - run: npm run check:napi-targets
 
       - run: npm run test:tooling
-
-      - run: cargo fmt --check
-
-      - run: cargo clippy --all-targets -- -D warnings
-
-      - run: cargo test
 
       - run: npm run typecheck
 
