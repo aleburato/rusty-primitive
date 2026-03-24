@@ -1,6 +1,6 @@
 {
   "name": "@aleburato/primeval",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": false,
   "type": "module",
   "description": "TypeScript-first Node package for primeval image approximation.",
@@ -41,11 +41,11 @@
     "prepack": "tsc"
   },
   "optionalDependencies": {
-    "@aleburato/primeval-darwin-arm64": "0.1.0",
-    "@aleburato/primeval-darwin-x64": "0.1.0",
-    "@aleburato/primeval-linux-arm64-gnu": "0.1.0",
-    "@aleburato/primeval-linux-x64-gnu": "0.1.0",
-    "@aleburato/primeval-win32-x64-msvc": "0.1.0"
+    "@aleburato/primeval-darwin-arm64": "0.1.1",
+    "@aleburato/primeval-darwin-x64": "0.1.1",
+    "@aleburato/primeval-linux-arm64-gnu": "0.1.1",
+    "@aleburato/primeval-linux-x64-gnu": "0.1.1",
+    "@aleburato/primeval-win32-x64-msvc": "0.1.1"
   },
   "napi": {
     "binaryName": "primeval-node",
