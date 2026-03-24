@@ -7,7 +7,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git@github.com:aleburato/primeval.git"
+    "url": "git+ssh://git@github.com/aleburato/primeval.git"
   },
   "publishConfig": {
     "access": "public"
