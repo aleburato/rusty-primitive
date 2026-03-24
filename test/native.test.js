@@ -57,6 +57,36 @@ test("native approximate renders bytes to png", async () => {
   assert.ok(result.height > 0);
 });
 
+test("native approximate accepts omitted seed", async () => {
+  const result = await approximate({
+    input: { kind: "bytes", data: FIXTURE_IMAGE },
+    output: "svg",
+    render: {
+      count: 4,
+      shape: "any",
+      alpha: 128,
+      repeat: 0,
+      background: "auto",
+      resizeInput: 8,
+      outputSize: 16,
+    },
+  });
+
+  assert.equal(result.format, "svg");
+  assert.match(result.data, /^<svg\b/);
+});
+
+test("native approximate accepts auto alpha", async () => {
+  const result = await approximate({
+    input: { kind: "bytes", data: FIXTURE_IMAGE },
+    output: "svg",
+    render: render({ alpha: "auto" }),
+  });
+
+  assert.equal(result.format, "svg");
+  assert.match(result.data, /^<svg\b/);
+});
+
 test("native approximate maps missing files to NotFoundError", async () => {
   await assert.rejects(
     approximate({

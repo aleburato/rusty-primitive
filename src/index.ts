@@ -133,14 +133,14 @@ interface NativeAddon {
 }
 
 interface NormalizedRender {
-  count: number;
-  shape: Shape;
-  alpha: number | "auto";
-  repeat: number;
-  seed: number | undefined;
-  background: string;
-  resizeInput: number;
-  outputSize: number;
+  count?: number;
+  shape?: Shape;
+  alpha?: number | "auto";
+  repeat?: number;
+  seed?: number;
+  background?: string;
+  resizeInput?: number;
+  outputSize?: number;
 }
 
 interface NormalizedInput {
@@ -189,31 +189,38 @@ function normalizeInput(input: unknown): NormalizedInput {
 
 function normalizeRender(render?: Record<string, unknown>): NormalizedRender {
   const r = render ?? {};
-  const count = (r.count as number | undefined) ?? 100;
-  const shape = (r.shape as Shape | undefined) ?? "any";
-  const alpha = (r.alpha as number | "auto" | undefined) ?? 128;
-  const repeat = (r.repeat as number | undefined) ?? 0;
-  const background = (r.background as string | undefined) ?? "auto";
-  const resizeInput = (r.resizeInput as number | undefined) ?? 256;
-  const outputSize = (r.outputSize as number | undefined) ?? 1024;
-  const seed = r.seed as number | undefined;
+  const count = r.count == null ? undefined : (r.count as number);
+  const shape = r.shape == null ? undefined : (r.shape as Shape);
+  const alpha = r.alpha == null ? undefined : (r.alpha as number | "auto");
+  const repeat = r.repeat == null ? undefined : (r.repeat as number);
+  const background = r.background == null ? undefined : (r.background as string);
+  const resizeInput = r.resizeInput == null ? undefined : (r.resizeInput as number);
+  const outputSize = r.outputSize == null ? undefined : (r.outputSize as number);
+  const seed = r.seed == null ? undefined : (r.seed as number);
 
-  if (!Number.isInteger(count) || count < 1) {
+  if (count !== undefined && (!Number.isInteger(count) || count < 1)) {
     throw new ValidationError("count must be at least 1");
   }
-  if (!(VALID_SHAPES as readonly string[]).includes(shape)) {
+  if (shape !== undefined && !(VALID_SHAPES as readonly string[]).includes(shape)) {
     throw new ValidationError(`unknown shape: ${shape}`);
   }
-  if (alpha !== "auto" && (!Number.isInteger(alpha) || alpha < 1 || alpha > 255)) {
+  if (
+    alpha !== undefined &&
+    alpha !== "auto" &&
+    (!Number.isInteger(alpha) || alpha < 1 || alpha > 255)
+  ) {
     throw new ValidationError("alpha must be 1..255 or auto");
   }
-  if (!Number.isInteger(repeat) || repeat < 0) {
+  if (repeat !== undefined && (!Number.isInteger(repeat) || repeat < 0)) {
     throw new ValidationError("repeat must be at least 0");
   }
-  if (!Number.isInteger(resizeInput) || resizeInput < 1) {
+  if (seed !== undefined && (!Number.isInteger(seed) || seed < 0)) {
+    throw new ValidationError("seed must be a positive integer");
+  }
+  if (resizeInput !== undefined && (!Number.isInteger(resizeInput) || resizeInput < 1)) {
     throw new ValidationError("resizeInput must be at least 1");
   }
-  if (!Number.isInteger(outputSize) || outputSize < 1) {
+  if (outputSize !== undefined && (!Number.isInteger(outputSize) || outputSize < 1)) {
     throw new ValidationError("outputSize must be at least 1");
   }
 
@@ -322,14 +329,22 @@ function startApproximate(
     input: normalized.input,
     output: normalized.output,
     render: {
-      count: normalized.render.count,
-      shape: normalized.render.shape,
-      alpha: normalized.render.alpha === "auto" ? null : normalized.render.alpha,
-      repeat: normalized.render.repeat,
-      seed: normalized.render.seed ?? null,
-      background: normalized.render.background,
-      resizeInput: normalized.render.resizeInput,
-      outputSize: normalized.render.outputSize,
+      ...(normalized.render.count === undefined ? {} : { count: normalized.render.count }),
+      ...(normalized.render.shape === undefined ? {} : { shape: normalized.render.shape }),
+      ...(normalized.render.alpha === undefined
+        ? {}
+        : { alpha: String(normalized.render.alpha) }),
+      ...(normalized.render.repeat === undefined ? {} : { repeat: normalized.render.repeat }),
+      ...(normalized.render.seed === undefined ? {} : { seed: normalized.render.seed }),
+      ...(normalized.render.background === undefined
+        ? {}
+        : { background: normalized.render.background }),
+      ...(normalized.render.resizeInput === undefined
+        ? {}
+        : { resizeInput: normalized.render.resizeInput }),
+      ...(normalized.render.outputSize === undefined
+        ? {}
+        : { outputSize: normalized.render.outputSize }),
     },
     execution: onProgress ? { onProgress } : undefined,
   });

@@ -4,7 +4,7 @@ use napi::{Env, Status};
 use napi_derive::napi;
 use primeval_core::shapes::ShapeKind;
 use primeval_render::{
-    approximate, parse_alpha_u32, parse_background_str, parse_seed_i64, ApproximateError,
+    approximate, parse_alpha_str, parse_background_str, parse_seed_i64, ApproximateError,
     ApproximateRequest, ApproximateResult, InputSource, OutputFormat, ProgressInfo, RenderOptions,
 };
 use std::collections::HashMap;
@@ -59,16 +59,16 @@ pub struct NativeInputSource {
 
 #[napi(object, object_to_js = false)]
 pub struct NativeRenderOptions {
-    pub count: u32,
-    pub shape: String,
-    pub alpha: Option<u32>,
-    pub repeat: u32,
+    pub count: Option<u32>,
+    pub shape: Option<String>,
+    pub alpha: Option<String>,
+    pub repeat: Option<u32>,
     pub seed: Option<i64>,
-    pub background: String,
+    pub background: Option<String>,
     #[napi(js_name = "resizeInput")]
-    pub resize_input: u32,
+    pub resize_input: Option<u32>,
     #[napi(js_name = "outputSize")]
-    pub output_size: u32,
+    pub output_size: Option<u32>,
 }
 
 #[napi(object, object_to_js = false)]
@@ -188,16 +188,31 @@ fn normalize_request(
         .parse::<OutputFormat>()
         .map_err(|message| napi_error("ValidationError", message))?;
 
+    let defaults = RenderOptions::default();
+
     let shape = render
         .shape
-        .parse::<ShapeKind>()
-        .map_err(|message| napi_error("ValidationError", message))?;
+        .as_deref()
+        .map(|shape| shape.parse::<ShapeKind>())
+        .transpose()
+        .map_err(|message| napi_error("ValidationError", message))?
+        .unwrap_or(defaults.shape);
 
-    let alpha =
-        parse_alpha_u32(render.alpha).map_err(|message| napi_error("ValidationError", message))?;
+    let alpha = render
+        .alpha
+        .as_deref()
+        .map(parse_alpha_str)
+        .transpose()
+        .map_err(|message| napi_error("ValidationError", message))?
+        .unwrap_or(defaults.alpha);
 
-    let background = parse_background_str(&render.background)
-        .map_err(|message| napi_error("ValidationError", message))?;
+    let background = render
+        .background
+        .as_deref()
+        .map(parse_background_str)
+        .transpose()
+        .map_err(|message| napi_error("ValidationError", message))?
+        .unwrap_or(defaults.background);
 
     let seed = render
         .seed
@@ -208,16 +223,16 @@ fn normalize_request(
         input,
         output: format,
         render: RenderOptions {
-            count: render.count,
+            count: render.count.unwrap_or(defaults.count),
             shape,
             alpha,
-            repeat: render.repeat as usize,
+            repeat: render.repeat.map_or(defaults.repeat, |repeat| repeat as usize),
             seed,
             background,
-            resize_input: render.resize_input,
-            output_size: render.output_size,
-            workers: None,
-            gif_frame_step: 1,
+            resize_input: render.resize_input.unwrap_or(defaults.resize_input),
+            output_size: render.output_size.unwrap_or(defaults.output_size),
+            workers: defaults.workers,
+            gif_frame_step: defaults.gif_frame_step,
         },
     })
 }
@@ -269,14 +284,14 @@ mod tests {
 
     fn render_options(shape: &str) -> NativeRenderOptions {
         NativeRenderOptions {
-            count: 1,
-            shape: shape.to_string(),
-            alpha: Some(128),
-            repeat: 0,
+            count: Some(1),
+            shape: Some(shape.to_string()),
+            alpha: Some("128".to_string()),
+            repeat: Some(0),
             seed: Some(7),
-            background: "auto".to_string(),
-            resize_input: 32,
-            output_size: 32,
+            background: Some("auto".to_string()),
+            resize_input: Some(32),
+            output_size: Some(32),
         }
     }
 
@@ -311,6 +326,50 @@ mod tests {
         .expect_err("shape should fail");
 
         assert_eq!(error.reason, "[ValidationError] unknown shape: hexagon");
+    }
+
+    #[test]
+    fn normalize_request_uses_rust_defaults_for_omitted_render_fields() {
+        let request = normalize_request(
+            NativeInputSource {
+                kind: "bytes".to_string(),
+                path: None,
+                data: Some(Buffer::from(vec![0_u8; 4])),
+            },
+            "svg".to_string(),
+            NativeRenderOptions {
+                count: None,
+                shape: None,
+                alpha: None,
+                repeat: None,
+                seed: None,
+                background: None,
+                resize_input: None,
+                output_size: None,
+            },
+        )
+        .expect("request should normalize");
+
+        assert_eq!(request.render, RenderOptions::default());
+    }
+
+    #[test]
+    fn normalize_request_accepts_auto_alpha_string() {
+        let request = normalize_request(
+            NativeInputSource {
+                kind: "bytes".to_string(),
+                path: None,
+                data: Some(Buffer::from(vec![0_u8; 4])),
+            },
+            "svg".to_string(),
+            NativeRenderOptions {
+                alpha: Some("auto".to_string()),
+                ..render_options("any")
+            },
+        )
+        .expect("request should normalize");
+
+        assert_eq!(request.render.alpha, primeval_render::AlphaOption::Auto);
     }
 
     #[test]

@@ -26,26 +26,6 @@ function parseRustVariants(source, enumName) {
   return [...match[1].matchAll(/"([^"]+)"/g)].map((entry) => entry[1]);
 }
 
-function parseTsRenderDefaults(source) {
-  const patterns = {
-    count: /const count = .*\?\? (\d+);/,
-    shape: /const shape = .*\?\? "([^"]+)";/,
-    alpha: /const alpha = .*\?\? (\d+);/,
-    repeat: /const repeat = .*\?\? (\d+);/,
-    background: /const background = .*\?\? "([^"]+)";/,
-    resizeInput: /const resizeInput = .*\?\? (\d+);/,
-    outputSize: /const outputSize = .*\?\? (\d+);/,
-  };
-
-  return Object.fromEntries(
-    Object.entries(patterns).map(([key, pattern]) => {
-      const match = source.match(pattern);
-      assert.ok(match, `missing TypeScript default for ${key}`);
-      return [key, /^\d+$/.test(match[1]) ? Number(match[1]) : match[1]];
-    }),
-  );
-}
-
 function parseRustRenderDefaults(source) {
   const block = source.match(/impl Default for RenderOptions \{.*?Self \{(.*?)\n\s*}\n\s*}/s);
   assert.ok(block, "missing RenderOptions::default");
@@ -105,11 +85,18 @@ test("wrapper output vocabulary mirrors Rust", () => {
   );
 });
 
-test("wrapper render defaults mirror Rust", () => {
+test("wrapper leaves render defaults to Rust", () => {
   const tsSource = readRepoFile("src", "index.ts");
   const rustSource = readRepoFile("crates", "primeval-render", "src", "lib.rs");
 
-  assert.deepEqual(parseTsRenderDefaults(tsSource), parseRustRenderDefaults(rustSource));
+  const rustDefaults = parseRustRenderDefaults(rustSource);
+
+  for (const value of Object.values(rustDefaults)) {
+    assert.doesNotMatch(
+      tsSource,
+      new RegExp(`\\?\\? ${typeof value === "number" ? value : `"${value}"`}`),
+    );
+  }
 });
 
 test("alpha validation message is aligned across surfaces", () => {
@@ -134,7 +121,7 @@ test("cli and binding use shared Rust option parsers", () => {
 
   assert.match(cliSource, /parse_alpha_str/);
   assert.match(cliSource, /parse_background_str/);
-  assert.match(bindingSource, /parse_alpha_u32/);
+  assert.match(bindingSource, /parse_alpha_str/);
   assert.match(bindingSource, /parse_background_str/);
   assert.match(bindingSource, /parse_seed_i64/);
 });

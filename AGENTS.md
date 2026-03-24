@@ -25,12 +25,14 @@ Generated output:
 - Browser/WASM support is explicitly out of scope.
 - CommonJS support is explicitly out of scope.
 - Rust is the runtime source of truth for accepted vocabularies, defaults, and validation semantics.
+- The final Rust API is the only source of truth for render-option defaults. If a value is omitted, `undefined`, or intentionally left unset, wrapper and binding layers should pass that absence through so Rust can decide the default.
 - TypeScript mirrors the Rust contract; do not introduce cross-language code generation or shared schema systems.
 - Do not add new public render options unless required to make existing behavior consistent across CLI, render, binding, and TypeScript.
 
 ## Implementation Rules
 
 - Keep CLI, `primeval-render`, `binding`, and `src/index.ts` aligned on defaults, accepted values, and error behavior.
+- Do not reinvent Rust defaults in TypeScript or napi request shims. Validate explicit user input there, but let Rust merge omitted fields onto its own defaults.
 - Prefer shared Rust parsers/helpers over duplicated string tables in CLI and binding.
 - Keep the TypeScript wrapper thin. Canonical runtime behavior should live in Rust unless there is a strong package-layer reason not to.
 - Red-green-refactor TDD is a hard rule for code changes: add or update a failing test first, make it pass with the smallest useful change, then clean up.
