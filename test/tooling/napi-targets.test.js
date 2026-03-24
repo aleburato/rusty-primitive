@@ -5,8 +5,10 @@ import path from "node:path";
 import { test } from "node:test";
 
 import {
+  updatePackageVersion,
   optionalDependencyNamesForTargets,
   releaseMatrixForTargets,
+  validatePackageLock,
   validatePackageMetadata,
   verifyArtifacts,
 } from "../../scripts/napi-targets.mjs";
@@ -65,6 +67,82 @@ test("package metadata validation rejects drift between targets and optional dep
       }),
     /optionalDependencies/i,
   );
+});
+
+test("package-lock validation rejects stale optional dependency versions", () => {
+  const pkg = {
+    name: "@aleburato/primeval",
+    version: "0.1.1",
+    optionalDependencies: {
+      "@aleburato/primeval-darwin-arm64": "0.1.1",
+      "@aleburato/primeval-darwin-x64": "0.1.1",
+    },
+    napi: {
+      targets: ["aarch64-apple-darwin", "x86_64-apple-darwin"],
+    },
+  };
+
+  assert.throws(
+    () =>
+      validatePackageLock(pkg, {
+        name: "@aleburato/primeval",
+        version: "0.1.1",
+        packages: {
+          "": {
+            name: "@aleburato/primeval",
+            version: "0.1.1",
+            optionalDependencies: {
+              "@aleburato/primeval-darwin-arm64": "0.1.0",
+              "@aleburato/primeval-darwin-x64": "0.1.0",
+            },
+          },
+          "node_modules/@aleburato/primeval-darwin-arm64": {
+            version: "0.1.0",
+          },
+          "node_modules/@aleburato/primeval-darwin-x64": {
+            version: "0.1.0",
+          },
+        },
+      }),
+    /package-lock/i,
+  );
+});
+
+test("package version updates rewrite optional dependency versions from napi targets", () => {
+  const pkg = updatePackageVersion(
+    {
+      name: "@aleburato/primeval",
+      version: "0.1.0",
+      optionalDependencies: {
+        "@aleburato/primeval-linux-x64-gnu": "0.1.0",
+      },
+      napi: {
+        targets: [
+          "aarch64-apple-darwin",
+          "x86_64-apple-darwin",
+          "aarch64-unknown-linux-gnu",
+          "x86_64-unknown-linux-gnu",
+          "x86_64-pc-windows-msvc",
+        ],
+      },
+      devDependencies: {
+        typescript: "^5.5.4",
+      },
+    },
+    "0.1.1",
+  );
+
+  assert.equal(pkg.version, "0.1.1");
+  assert.deepEqual(pkg.optionalDependencies, {
+    "@aleburato/primeval-darwin-arm64": "0.1.1",
+    "@aleburato/primeval-darwin-x64": "0.1.1",
+    "@aleburato/primeval-linux-arm64-gnu": "0.1.1",
+    "@aleburato/primeval-linux-x64-gnu": "0.1.1",
+    "@aleburato/primeval-win32-x64-msvc": "0.1.1",
+  });
+  assert.deepEqual(pkg.devDependencies, {
+    typescript: "^5.5.4",
+  });
 });
 
 test("artifact verification accepts matching native payloads", () => {

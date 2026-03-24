@@ -32,6 +32,7 @@
     "build": "tsc",
     "build:node": "napi build -p primeval-node --release --output-dir . --dts target/primeval-node.d.ts",
     "check:napi-targets": "node scripts/napi-targets.mjs check-package",
+    "bump:version": "node scripts/napi-targets.mjs bump-version",
     "test:native:build": "npm run build && npm run build:node",
     "test:native": "node --test test/native.test.js",
     "typecheck": "tsc --noEmit",

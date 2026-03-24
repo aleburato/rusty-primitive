@@ -24,6 +24,11 @@ const DEFAULT_PACKAGE_JSON = path.resolve(
   "..",
   "package.json",
 );
+const DEFAULT_PACKAGE_LOCK = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "package-lock.json",
+);
 
 export function optionalDependencyNamesForTargets(packageName, targets) {
   return targets.map((target) => `${packageName}-${packageSuffixForTarget(target)}`);
@@ -40,6 +45,10 @@ export function releaseMatrixForTargets(targets) {
 
 export function readPackageMetadata(packageJsonPath = DEFAULT_PACKAGE_JSON) {
   return JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+}
+
+export function readPackageLock(packageLockPath = DEFAULT_PACKAGE_LOCK) {
+  return JSON.parse(fs.readFileSync(packageLockPath, "utf8"));
 }
 
 export function validatePackageMetadata(pkg) {
@@ -74,6 +83,117 @@ export function validatePackageMetadata(pkg) {
     version,
     expectedOptionalDependencies,
   };
+}
+
+export function validatePackageLock(pkg, packageLock) {
+  const { packageName, version, expectedOptionalDependencies } = validatePackageMetadata(pkg);
+  const lockName = requiredString(packageLock.name, "package-lock.json name");
+  const lockVersion = requiredString(packageLock.version, "package-lock.json version");
+  const rootPackage = requiredObject(packageLock.packages?.[""], "package-lock.json packages[\"\"]");
+
+  if (lockName !== packageName) {
+    throw new Error(
+      `package-lock.json name ${lockName} must match package.json name ${packageName}`,
+    );
+  }
+
+  if (lockVersion !== version) {
+    throw new Error(
+      `package-lock.json version ${lockVersion} must match package.json version ${version}`,
+    );
+  }
+
+  if (rootPackage.name !== packageName) {
+    throw new Error(
+      `package-lock.json root package name ${rootPackage.name} must match ${packageName}`,
+    );
+  }
+
+  if (rootPackage.version !== version) {
+    throw new Error(
+      `package-lock.json root package version ${rootPackage.version} must match ${version}`,
+    );
+  }
+
+  const expectedOptionalDependencyVersions = optionalDependencyVersionMap(
+    expectedOptionalDependencies,
+    version,
+  );
+  const rootOptionalDependencies = normalizeDependencyMap(rootPackage.optionalDependencies);
+
+  if (
+    JSON.stringify(rootOptionalDependencies) !==
+    JSON.stringify(normalizeDependencyMap(expectedOptionalDependencyVersions))
+  ) {
+    throw new Error(
+      `package-lock.json root optionalDependencies must match package.json for version ${version}`,
+    );
+  }
+
+  for (const dependencyName of expectedOptionalDependencies) {
+    const dependencyPackage = requiredObject(
+      packageLock.packages?.[`node_modules/${dependencyName}`],
+      `package-lock.json entry for ${dependencyName}`,
+    );
+
+    if (dependencyPackage.version !== version) {
+      throw new Error(
+        `package-lock.json entry ${dependencyName} must use version ${version}`,
+      );
+    }
+  }
+
+  return {
+    packageName,
+    version,
+    expectedOptionalDependencies,
+  };
+}
+
+export function updatePackageVersion(pkg, nextVersion) {
+  const packageName = requiredString(pkg.name, "package.json name");
+  const version = requiredString(nextVersion, "next version");
+  const targets = requiredTargets(pkg.napi?.targets);
+  const expectedOptionalDependencies = optionalDependencyNamesForTargets(packageName, targets);
+
+  return {
+    ...pkg,
+    version,
+    optionalDependencies: optionalDependencyVersionMap(expectedOptionalDependencies, version),
+  };
+}
+
+export function bumpPackageVersion(
+  nextVersion,
+  packageJsonPath = DEFAULT_PACKAGE_JSON,
+  packageLockPath = DEFAULT_PACKAGE_LOCK,
+) {
+  const resolvedPackageJsonPath = path.resolve(packageJsonPath);
+  const resolvedPackageLockPath = path.resolve(packageLockPath);
+  const packageDir = path.dirname(resolvedPackageJsonPath);
+  const existingPackageJson = fs.readFileSync(resolvedPackageJsonPath, "utf8");
+  const existingPackageLock = fs.existsSync(resolvedPackageLockPath)
+    ? fs.readFileSync(resolvedPackageLockPath, "utf8")
+    : null;
+
+  try {
+    const updatedPackage = updatePackageVersion(readPackageMetadata(resolvedPackageJsonPath), nextVersion);
+    writeJsonFile(resolvedPackageJsonPath, updatedPackage);
+    execFileSync(npmCommand(), ["install", "--package-lock-only", "--ignore-scripts"], {
+      cwd: packageDir,
+      stdio: "inherit",
+    });
+    validatePackageLock(updatedPackage, readPackageLock(resolvedPackageLockPath));
+    return updatedPackage;
+  } catch (error) {
+    fs.writeFileSync(resolvedPackageJsonPath, existingPackageJson);
+    if (existingPackageLock === null) {
+      fs.rmSync(resolvedPackageLockPath, { force: true });
+    } else {
+      fs.writeFileSync(resolvedPackageLockPath, existingPackageLock);
+    }
+    throw error;
+  }
 }
 
 export function verifyArtifacts(artifactsDir, pkg) {
@@ -121,11 +241,38 @@ function requiredString(value, label) {
   return value;
 }
 
+function requiredObject(value, label) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} is required`);
+  }
+  return value;
+}
+
 function requiredTargets(targets) {
   if (!Array.isArray(targets) || targets.length === 0) {
     throw new Error("package.json napi.targets must be a non-empty array");
   }
   return targets.map((target) => requiredString(target, "napi.targets entry"));
+}
+
+function normalizeDependencyMap(dependencies) {
+  return Object.fromEntries(
+    Object.entries(requiredObject(dependencies ?? {}, "dependency map")).sort(([left], [right]) =>
+      left.localeCompare(right),
+    ),
+  );
+}
+
+function optionalDependencyVersionMap(optionalDependencies, version) {
+  return Object.fromEntries(optionalDependencies.map((dependencyName) => [dependencyName, version]));
+}
+
+function writeJsonFile(filePath, value) {
+  fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function npmCommand() {
+  return process.platform === "win32" ? "npm.cmd" : "npm";
 }
 
 function packageSuffixForTarget(target) {
@@ -232,13 +379,14 @@ function usage() {
       "  node scripts/napi-targets.mjs check-package [package.json path]",
       "  node scripts/napi-targets.mjs release-matrix [package.json path]",
       "  node scripts/napi-targets.mjs expected-packages [package.json path]",
+      "  node scripts/napi-targets.mjs bump-version <version> [package.json path] [package-lock.json path]",
       "  node scripts/napi-targets.mjs verify-artifacts <artifacts dir> [package.json path]",
     ].join("\n"),
   );
 }
 
 function main(argv) {
-  const [command, firstArg, secondArg] = argv;
+  const [command, firstArg, secondArg, thirdArg] = argv;
   if (!command) {
     usage();
     process.exitCode = 1;
@@ -248,7 +396,14 @@ function main(argv) {
   try {
     switch (command) {
       case "check-package": {
-        const result = validatePackageMetadata(readPackageMetadata(firstArg));
+        const packageJsonPath = firstArg ? path.resolve(firstArg) : DEFAULT_PACKAGE_JSON;
+        const pkg = readPackageMetadata(packageJsonPath);
+        const result = validatePackageMetadata(pkg);
+        const packageLockPath = path.resolve(path.dirname(packageJsonPath), "package-lock.json");
+        if (!fs.existsSync(packageLockPath)) {
+          throw new Error(`package-lock.json is required next to ${packageJsonPath}`);
+        }
+        validatePackageLock(pkg, readPackageLock(packageLockPath));
         console.log(JSON.stringify(result));
         break;
       }
@@ -261,6 +416,18 @@ function main(argv) {
       case "expected-packages": {
         const result = validatePackageMetadata(readPackageMetadata(firstArg));
         console.log(JSON.stringify(result.expectedOptionalDependencies));
+        break;
+      }
+      case "bump-version": {
+        if (!firstArg) {
+          throw new Error("bump-version requires a version");
+        }
+        const result = bumpPackageVersion(
+          firstArg,
+          secondArg ?? DEFAULT_PACKAGE_JSON,
+          thirdArg ?? DEFAULT_PACKAGE_LOCK,
+        );
+        console.log(JSON.stringify(result));
         break;
       }
       case "verify-artifacts": {
